@@ -79,3 +79,33 @@ export interface SyncPayload {
   settings: AppSettings;
 }
 
+export interface AuthUser {
+  id: string;
+  username: string;
+  email: string;
+  createdAt: string;
+}
+
+export interface AuthResponse {
+  success: boolean;
+  user?: AuthUser;
+  state?: UserState;
+  token?: string;
+  message?: string;
+  error?: string;
+  randomCredentials?: {
+    username: string;
+    email: string;
+    password?: string;
+  };
+}
+
+export interface AccountResetPayload {
+  username?: string;
+  email?: string;
+  currentPassword?: string;
+  newPassword?: string;
+  randomizeIdentity?: boolean;
+  resetReadingData?: boolean;
+}
+

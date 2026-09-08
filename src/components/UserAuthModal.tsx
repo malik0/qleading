@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useApp } from "../context/AppContext";
 import { formatAudioTime } from "../lib/utils";
 import {
@@ -12,6 +12,16 @@ import {
   ShieldCheck,
   CheckCircle2,
   Calendar,
+  Sparkles,
+  Shuffle,
+  Copy,
+  Check,
+  RefreshCw,
+  Lock,
+  Mail,
+  AlertCircle,
+  Database,
+  Trash2,
 } from "lucide-react";
 
 interface UserAuthModalProps {
@@ -23,26 +33,191 @@ export const UserAuthModal: React.FC<UserAuthModalProps> = ({
   isOpen,
   onClose,
 }) => {
-  const { userState, loginUser, logoutUser, userLogs } = useApp();
+  const {
+    userState,
+    loginUser,
+    registerUser,
+    generateRandomUser,
+    resetAccountDetails,
+    logoutUser,
+    userLogs,
+    isSyncing,
+    lastSynced,
+    manualSync,
+  } = useApp();
 
-  const [emailInput, setEmailInput] = useState("");
-  const [nameInput, setNameInput] = useState("");
+  // Navigation tabs
   const [activeTab, setActiveTab] = useState<"auth" | "logs">("auth");
+  const [unauthMode, setUnauthMode] = useState<"random" | "login" | "register">("random");
+
+  // Form inputs for login / register
+  const [emailInput, setEmailInput] = useState("");
+  const [passwordInput, setPasswordInput] = useState("");
+  const [nameInput, setNameInput] = useState("");
+
+  // Form inputs for resetting account details
+  const [editUsername, setEditUsername] = useState(userState.userName);
+  const [editEmail, setEditEmail] = useState(userState.userEmail);
+  const [currentPasswordInput, setCurrentPasswordInput] = useState("");
+  const [newPasswordInput, setNewPasswordInput] = useState("");
+  const [confirmResetData, setConfirmResetData] = useState(false);
+
+  // Status feedback
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // Generated credentials display
+  const [generatedCreds, setGeneratedCreds] = useState<{
+    username: string;
+    email: string;
+    password?: string;
+  } | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  // Keep edit inputs in sync when user logs in or profile changes
+  useEffect(() => {
+    if (userState.isLoggedIn) {
+      setEditUsername(userState.userName);
+      setEditEmail(userState.userEmail);
+    }
+  }, [userState.isLoggedIn, userState.userName, userState.userEmail]);
 
   if (!isOpen) return null;
 
+  const clearFeedback = () => {
+    setErrorMessage(null);
+    setSuccessMessage(null);
+  };
+
+  // 1. One-Click Random Account Handler
+  const handleGenerateRandom = async () => {
+    clearFeedback();
+    setIsSubmitting(true);
+    const res = await generateRandomUser();
+    setIsSubmitting(false);
+
+    if (res.success && res.credentials) {
+      setGeneratedCreds(res.credentials);
+      setSuccessMessage("Account generated and connected to Cloudflare D1!");
+    } else {
+      setErrorMessage(res.error || "Failed to generate random account.");
+    }
+  };
+
+  // 2. Standard Login Handler
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!emailInput.trim()) return;
+    clearFeedback();
+    if (!emailInput.trim() || !passwordInput) {
+      setErrorMessage("Please enter both email and password.");
+      return;
+    }
+
     setIsSubmitting(true);
-    await loginUser(emailInput.trim(), nameInput.trim() || undefined);
+    const res = await loginUser(emailInput.trim(), passwordInput);
     setIsSubmitting(false);
+
+    if (res.success) {
+      setSuccessMessage("Logged in successfully! Progress synchronized.");
+      setEmailInput("");
+      setPasswordInput("");
+    } else {
+      setErrorMessage(res.error || "Invalid credentials.");
+    }
+  };
+
+  // 3. Register Handler
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    clearFeedback();
+    if (!emailInput.trim() || !passwordInput) {
+      setErrorMessage("Email and password are required.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    const res = await registerUser(
+      nameInput.trim() || emailInput.split("@")[0],
+      emailInput.trim(),
+      passwordInput
+    );
+    setIsSubmitting(false);
+
+    if (res.success) {
+      setSuccessMessage("Account registered and synchronized with Cloudflare D1!");
+      setEmailInput("");
+      setPasswordInput("");
+      setNameInput("");
+    } else {
+      setErrorMessage(res.error || "Failed to create account.");
+    }
+  };
+
+  // 4. Fill Register fields with random values
+  const fillRegisterWithRandom = () => {
+    const prefixes = ["Qari", "Reader", "Hafiz", "Tadabbur", "Noor", "Talib"];
+    const rand = prefixes[Math.floor(Math.random() * prefixes.length)];
+    const num = Math.floor(1000 + Math.random() * 9000);
+    const username = `${rand}_${num}`;
+    setNameInput(username);
+    setEmailInput(`${rand.toLowerCase()}_${num}@qleading.app`);
+    setPasswordInput(`ql-${Math.random().toString(36).substring(2, 10)}`);
+  };
+
+  // 5. Reset Account Details Handler
+  const handleResetDetails = async (e: React.FormEvent) => {
+    e.preventDefault();
+    clearFeedback();
+    setIsSubmitting(true);
+
+    const res = await resetAccountDetails({
+      username: editUsername.trim() !== userState.userName ? editUsername.trim() : undefined,
+      email: editEmail.trim() !== userState.userEmail ? editEmail.trim() : undefined,
+      currentPassword: currentPasswordInput || undefined,
+      newPassword: newPasswordInput ? newPasswordInput.trim() : undefined,
+      resetReadingData: confirmResetData,
+    });
+
+    setIsSubmitting(false);
+
+    if (res.success) {
+      setSuccessMessage(res.message || "Account details updated successfully!");
+      setCurrentPasswordInput("");
+      setNewPasswordInput("");
+      setConfirmResetData(false);
+    } else {
+      setErrorMessage(res.error || "Failed to update account details.");
+    }
+  };
+
+  // 6. Randomize Identity for Logged In User
+  const handleRandomizeCurrentIdentity = async () => {
+    clearFeedback();
+    setIsSubmitting(true);
+    const res = await resetAccountDetails({ randomizeIdentity: true });
+    setIsSubmitting(false);
+
+    if (res.success) {
+      setSuccessMessage("New random identity applied successfully!");
+    } else {
+      setErrorMessage(res.error || "Failed to re-randomize identity.");
+    }
+  };
+
+  // Copy credentials to clipboard
+  const handleCopyCredentials = () => {
+    if (!generatedCreds) return;
+    const text = `Username: ${generatedCreds.username}\nEmail: ${generatedCreds.email}\nPassword: ${generatedCreds.password || "(none)"}`;
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-fadeIn">
       <div className="bg-surface-card border border-surface-border rounded-3xl max-w-xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden transition-colors duration-200">
+        
         {/* Modal Header */}
         <div className="flex items-center justify-between p-6 border-b border-surface-border">
           <div className="flex items-center gap-2.5">
@@ -51,10 +226,10 @@ export const UserAuthModal: React.FC<UserAuthModalProps> = ({
             </div>
             <div>
               <h3 className="text-lg font-bold text-content-primary">
-                {userState.isLoggedIn ? "User Account & Logs" : "Sign In to Qleading"}
+                {userState.isLoggedIn ? "Account & Cloudflare Sync" : "Sign In to Qleading"}
               </h3>
               <p className="text-xs text-content-muted">
-                Multi-device position sync and personalized reading history
+                Multi-device position sync powered by Cloudflare D1
               </p>
             </div>
           </div>
@@ -76,7 +251,7 @@ export const UserAuthModal: React.FC<UserAuthModalProps> = ({
                 : "border-transparent text-content-muted hover:text-content-primary"
             }`}
           >
-            Account & Sync
+            {userState.isLoggedIn ? "Account Details" : "Sign In & Sync"}
           </button>
           <button
             onClick={() => setActiveTab("logs")}
@@ -91,47 +266,180 @@ export const UserAuthModal: React.FC<UserAuthModalProps> = ({
           </button>
         </div>
 
+        {/* Feedback Alerts */}
+        {errorMessage && (
+          <div className="mx-6 mt-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-500 text-xs flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{errorMessage}</span>
+          </div>
+        )}
+        {successMessage && (
+          <div className="mx-6 mt-4 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-500 text-xs flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <span>{successMessage}</span>
+          </div>
+        )}
+
         {/* Content Body */}
         <div className="p-6 overflow-y-auto space-y-6 flex-1">
           {activeTab === "auth" ? (
             userState.isLoggedIn ? (
-              /* Logged In View */
+              /* LOGGED IN VIEW */
               <div className="space-y-6">
-                <div className="flex items-center gap-4 p-4 rounded-2xl bg-surface-subtle border border-surface-border">
-                  <div
-                    className="w-14 h-14 rounded-2xl flex items-center justify-center text-white font-bold text-xl shadow-lg"
-                    style={{
-                      background: "linear-gradient(135deg, var(--color-primary), var(--color-primary-hover))",
-                    }}
-                  >
-                    {userState.userName.charAt(0).toUpperCase()}
+                
+                {/* Profile Card */}
+                <div className="flex items-center justify-between p-4 rounded-2xl bg-surface-subtle border border-surface-border">
+                  <div className="flex items-center gap-4">
+                    <div
+                      className="w-14 h-14 rounded-2xl flex items-center justify-center text-white font-bold text-xl shadow-lg shrink-0"
+                      style={{
+                        background: "linear-gradient(135deg, var(--color-primary), var(--color-primary-hover))",
+                      }}
+                    >
+                      {userState.userName.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <h4 className="text-base font-bold text-content-primary flex items-center gap-1.5">
+                        {userState.userName}
+                        <ShieldCheck className="w-4 h-4 text-brand-primary" />
+                      </h4>
+                      <p className="text-xs text-content-muted">{userState.userEmail}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+                          <Database className="w-3 h-3" />
+                          Cloudflare D1 Connected
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="text-base font-bold text-content-primary flex items-center gap-1.5">
-                      {userState.userName}
-                      <ShieldCheck className="w-4 h-4 text-brand-primary" />
-                    </h4>
-                    <p className="text-xs text-content-muted">{userState.userEmail}</p>
-                    <span className="text-[10px] text-brand-primary font-mono mt-1 block">
+
+                  <button
+                    onClick={manualSync}
+                    disabled={isSyncing}
+                    title="Synchronize with Cloudflare D1"
+                    className="p-2.5 rounded-xl bg-surface-card hover:bg-surface-hover border border-surface-border text-content-secondary hover:text-content-primary transition shadow-sm"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${isSyncing ? "animate-spin text-brand-primary" : ""}`} />
+                  </button>
+                </div>
+
+                {/* Sync status card */}
+                <div className="p-4 rounded-2xl bg-brand-light/30 border border-brand-primary/20 text-xs space-y-1">
+                  <div className="flex items-center justify-between font-semibold text-brand-primary">
+                    <span className="flex items-center gap-1.5">
+                      <CheckCircle2 className="w-4 h-4" />
                       Multi-Device Sync Active
                     </span>
+                    <span className="text-[11px] font-mono text-content-muted">
+                      {lastSynced ? `Last synced: ${lastSynced}` : "Sync ready"}
+                    </span>
                   </div>
-                </div>
-
-                <div className="p-4 rounded-2xl bg-brand-light/40 border border-brand-primary/20 text-xs text-content-secondary space-y-1">
-                  <p className="font-semibold text-brand-primary flex items-center gap-1.5">
-                    <CheckCircle2 className="w-4 h-4 text-brand-primary" />
-                    Seamless Synchronization Enabled
-                  </p>
-                  <p className="text-content-muted">
-                    Your playback location and timer value are safely saved each second and reconciled across your phones, tablets, and computers using the latest timestamp.
+                  <p className="text-content-muted leading-relaxed">
+                    Audio position and reading timer are automatically synced to Cloudflare D1 whenever you pause, change Juz, or switch devices.
                   </p>
                 </div>
 
-                <div className="pt-2">
+                {/* RESET / UPDATE ACCOUNT DETAILS FORM */}
+                <div className="p-5 rounded-2xl bg-surface-subtle border border-surface-border space-y-4">
+                  <div className="flex items-center justify-between border-b border-surface-border pb-3">
+                    <div>
+                      <h5 className="text-sm font-bold text-content-primary">Reset Account Details</h5>
+                      <p className="text-[11px] text-content-muted">
+                        Update your identity, credentials, or reset your listening progress
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleRandomizeCurrentIdentity}
+                      disabled={isSubmitting}
+                      className="flex items-center gap-1 text-xs text-brand-primary hover:text-brand-hover bg-brand-light/50 px-2.5 py-1.5 rounded-lg border border-brand-primary/20 transition font-medium"
+                    >
+                      <Shuffle className="w-3.5 h-3.5" />
+                      Randomize Identity
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleResetDetails} className="space-y-3.5">
+                    <div>
+                      <label className="text-xs text-content-muted block mb-1 font-medium">
+                        Display Name
+                      </label>
+                      <input
+                        type="text"
+                        value={editUsername}
+                        onChange={(e) => setEditUsername(e.target.value)}
+                        placeholder="Your display name"
+                        className="w-full bg-surface-card border border-surface-border rounded-xl px-3 py-2 text-sm text-content-primary focus:outline-none focus:border-brand-primary"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs text-content-muted block mb-1 font-medium">
+                        Email Address
+                      </label>
+                      <input
+                        type="email"
+                        value={editEmail}
+                        onChange={(e) => setEditEmail(e.target.value)}
+                        placeholder="your-email@example.com"
+                        className="w-full bg-surface-card border border-surface-border rounded-xl px-3 py-2 text-sm text-content-primary focus:outline-none focus:border-brand-primary"
+                      />
+                    </div>
+
+                    <div className="pt-1 border-t border-surface-border/60">
+                      <label className="text-xs text-content-muted block mb-1 font-medium">
+                        Change Password (Optional)
+                      </label>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <input
+                          type="password"
+                          value={currentPasswordInput}
+                          onChange={(e) => setCurrentPasswordInput(e.target.value)}
+                          placeholder="Current password"
+                          className="w-full bg-surface-card border border-surface-border rounded-xl px-3 py-2 text-xs text-content-primary focus:outline-none focus:border-brand-primary"
+                        />
+                        <input
+                          type="password"
+                          value={newPasswordInput}
+                          onChange={(e) => setNewPasswordInput(e.target.value)}
+                          placeholder="New password"
+                          className="w-full bg-surface-card border border-surface-border rounded-xl px-3 py-2 text-xs text-content-primary focus:outline-none focus:border-brand-primary"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Reset Reading Data Checkbox */}
+                    <div className="pt-2 border-t border-surface-border/60">
+                      <label className="flex items-center gap-2 text-xs text-rose-500 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={confirmResetData}
+                          onChange={(e) => setConfirmResetData(e.target.checked)}
+                          className="rounded text-rose-500 focus:ring-rose-500 bg-surface-card border-surface-border"
+                        />
+                        <span className="flex items-center gap-1 font-medium">
+                          <Trash2 className="w-3.5 h-3.5" />
+                          Also reset all reading logs, streaks & progress to initial state
+                        </span>
+                      </label>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="w-full mt-2 py-2.5 rounded-xl bg-brand-primary hover:bg-brand-hover text-white font-semibold text-xs shadow-md transition disabled:opacity-50"
+                    >
+                      {isSubmitting ? "Saving Changes..." : "Save Account Changes"}
+                    </button>
+                  </form>
+                </div>
+
+                {/* Log Out Button */}
+                <div className="pt-1">
                   <button
                     onClick={logoutUser}
-                    className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 border border-rose-500/30 font-medium text-sm transition"
+                    className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 border border-rose-500/30 font-medium text-xs transition"
                   >
                     <LogOut className="w-4 h-4" />
                     Log Out of Account
@@ -139,53 +447,235 @@ export const UserAuthModal: React.FC<UserAuthModalProps> = ({
                 </div>
               </div>
             ) : (
-              /* Sign In View */
-              <form onSubmit={handleLogin} className="space-y-4">
-                <p className="text-sm text-content-secondary">
-                  Log in to sync your audio position, timer, and daily streaks seamlessly across all your devices.
-                </p>
-
-                <div className="space-y-3">
-                  <div>
-                    <label className="text-xs text-content-muted block mb-1 font-medium">
-                      Email Address
-                    </label>
-                    <input
-                      type="email"
-                      required
-                      value={emailInput}
-                      onChange={(e) => setEmailInput(e.target.value)}
-                      placeholder="user@example.com"
-                      className="w-full bg-surface-subtle border border-surface-border rounded-xl px-3 py-2.5 text-sm text-content-primary focus:outline-none focus:border-brand-primary"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-xs text-content-muted block mb-1 font-medium">
-                      Display Name (Optional)
-                    </label>
-                    <input
-                      type="text"
-                      value={nameInput}
-                      onChange={(e) => setNameInput(e.target.value)}
-                      placeholder="Your Name"
-                      className="w-full bg-surface-subtle border border-surface-border rounded-xl px-3 py-2.5 text-sm text-content-primary focus:outline-none focus:border-brand-primary"
-                    />
-                  </div>
+              /* UNAUTHENTICATED VIEW */
+              <div className="space-y-5">
+                
+                {/* Mode Selector */}
+                <div className="grid grid-cols-3 gap-1 p-1 bg-surface-subtle border border-surface-border rounded-2xl">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUnauthMode("random");
+                      clearFeedback();
+                    }}
+                    className={`py-2 px-3 text-xs font-semibold rounded-xl transition flex items-center justify-center gap-1.5 ${
+                      unauthMode === "random"
+                        ? "bg-brand-primary text-white shadow-md"
+                        : "text-content-muted hover:text-content-primary"
+                    }`}
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    1-Click Random
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUnauthMode("login");
+                      clearFeedback();
+                    }}
+                    className={`py-2 px-3 text-xs font-semibold rounded-xl transition flex items-center justify-center gap-1.5 ${
+                      unauthMode === "login"
+                        ? "bg-brand-primary text-white shadow-md"
+                        : "text-content-muted hover:text-content-primary"
+                    }`}
+                  >
+                    <LogIn className="w-3.5 h-3.5" />
+                    Sign In
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUnauthMode("register");
+                      clearFeedback();
+                    }}
+                    className={`py-2 px-3 text-xs font-semibold rounded-xl transition flex items-center justify-center gap-1.5 ${
+                      unauthMode === "register"
+                        ? "bg-brand-primary text-white shadow-md"
+                        : "text-content-muted hover:text-content-primary"
+                    }`}
+                  >
+                    <User className="w-3.5 h-3.5" />
+                    Register
+                  </button>
                 </div>
 
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-brand-primary hover:bg-brand-hover text-white font-bold text-sm shadow-lg transition disabled:opacity-50"
-                >
-                  <LogIn className="w-4 h-4" />
-                  {isSubmitting ? "Signing In..." : "Sign In & Sync"}
-                </button>
-              </form>
+                {/* 1. 1-CLICK RANDOM MODE */}
+                {unauthMode === "random" && (
+                  <div className="space-y-4">
+                    <div className="p-5 rounded-2xl bg-surface-subtle border border-surface-border space-y-3">
+                      <div className="flex items-center gap-2 text-brand-primary font-bold text-sm">
+                        <Sparkles className="w-4 h-4" />
+                        Instant Zero-Friction Account
+                      </div>
+                      <p className="text-xs text-content-secondary leading-relaxed">
+                        Generate a random account with 1 click. Your current reading progress, audio position, and streaks will automatically be preserved and synced to Cloudflare D1 across all your devices.
+                      </p>
+                      <p className="text-[11px] text-content-muted">
+                        You can view, copy, or reset your account details at any time once logged in.
+                      </p>
+
+                      <button
+                        type="button"
+                        onClick={handleGenerateRandom}
+                        disabled={isSubmitting}
+                        className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-brand-primary hover:bg-brand-hover text-white font-bold text-sm shadow-lg transition disabled:opacity-50"
+                      >
+                        <Sparkles className="w-4 h-4" />
+                        {isSubmitting ? "Generating Account..." : "Generate Random Account & Sync"}
+                      </button>
+                    </div>
+
+                    {/* Show generated credentials if just created */}
+                    {generatedCreds && (
+                      <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-xs space-y-2">
+                        <div className="flex items-center justify-between font-semibold text-emerald-500">
+                          <span>Your Generated Credentials</span>
+                          <button
+                            onClick={handleCopyCredentials}
+                            className="flex items-center gap-1 text-[11px] bg-emerald-500/20 px-2 py-1 rounded-lg hover:bg-emerald-500/30 transition"
+                          >
+                            {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                            {copied ? "Copied!" : "Copy Details"}
+                          </button>
+                        </div>
+                        <div className="font-mono text-[11px] space-y-0.5 text-content-secondary bg-surface-card/60 p-2.5 rounded-xl border border-surface-border">
+                          <div><strong>Username:</strong> {generatedCreds.username}</div>
+                          <div><strong>Email:</strong> {generatedCreds.email}</div>
+                          <div><strong>Password:</strong> {generatedCreds.password}</div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 2. SIGN IN MODE */}
+                {unauthMode === "login" && (
+                  <form onSubmit={handleLogin} className="space-y-4">
+                    <p className="text-xs text-content-secondary">
+                      Sign in to sync your audio position, timer, and daily streaks from Cloudflare D1.
+                    </p>
+
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-xs text-content-muted block mb-1 font-medium flex items-center gap-1.5">
+                          <Mail className="w-3.5 h-3.5" />
+                          Email Address
+                        </label>
+                        <input
+                          type="email"
+                          required
+                          value={emailInput}
+                          onChange={(e) => setEmailInput(e.target.value)}
+                          placeholder="user@example.com"
+                          className="w-full bg-surface-subtle border border-surface-border rounded-xl px-3 py-2.5 text-sm text-content-primary focus:outline-none focus:border-brand-primary"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-xs text-content-muted block mb-1 font-medium flex items-center gap-1.5">
+                          <Lock className="w-3.5 h-3.5" />
+                          Password
+                        </label>
+                        <input
+                          type="password"
+                          required
+                          value={passwordInput}
+                          onChange={(e) => setPasswordInput(e.target.value)}
+                          placeholder="••••••••"
+                          className="w-full bg-surface-subtle border border-surface-border rounded-xl px-3 py-2.5 text-sm text-content-primary focus:outline-none focus:border-brand-primary"
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-brand-primary hover:bg-brand-hover text-white font-bold text-sm shadow-lg transition disabled:opacity-50"
+                    >
+                      <LogIn className="w-4 h-4" />
+                      {isSubmitting ? "Signing In..." : "Sign In & Sync"}
+                    </button>
+                  </form>
+                )}
+
+                {/* 3. REGISTER MODE */}
+                {unauthMode === "register" && (
+                  <form onSubmit={handleRegister} className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs text-content-secondary">
+                        Create an account to persist your recitation history.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={fillRegisterWithRandom}
+                        className="flex items-center gap-1 text-[11px] text-brand-primary font-medium hover:underline"
+                      >
+                        <Shuffle className="w-3 h-3" />
+                        Fill Random
+                      </button>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-xs text-content-muted block mb-1 font-medium flex items-center gap-1.5">
+                          <User className="w-3.5 h-3.5" />
+                          Display Name
+                        </label>
+                        <input
+                          type="text"
+                          value={nameInput}
+                          onChange={(e) => setNameInput(e.target.value)}
+                          placeholder="e.g. Qari_5821"
+                          className="w-full bg-surface-subtle border border-surface-border rounded-xl px-3 py-2.5 text-sm text-content-primary focus:outline-none focus:border-brand-primary"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-xs text-content-muted block mb-1 font-medium flex items-center gap-1.5">
+                          <Mail className="w-3.5 h-3.5" />
+                          Email Address
+                        </label>
+                        <input
+                          type="email"
+                          required
+                          value={emailInput}
+                          onChange={(e) => setEmailInput(e.target.value)}
+                          placeholder="user@example.com"
+                          className="w-full bg-surface-subtle border border-surface-border rounded-xl px-3 py-2.5 text-sm text-content-primary focus:outline-none focus:border-brand-primary"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-xs text-content-muted block mb-1 font-medium flex items-center gap-1.5">
+                          <Lock className="w-3.5 h-3.5" />
+                          Password
+                        </label>
+                        <input
+                          type="password"
+                          required
+                          value={passwordInput}
+                          onChange={(e) => setPasswordInput(e.target.value)}
+                          placeholder="••••••••"
+                          className="w-full bg-surface-subtle border border-surface-border rounded-xl px-3 py-2.5 text-sm text-content-primary focus:outline-none focus:border-brand-primary"
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-brand-primary hover:bg-brand-hover text-white font-bold text-sm shadow-lg transition disabled:opacity-50"
+                    >
+                      <User className="w-4 h-4" />
+                      {isSubmitting ? "Creating Account..." : "Create Account & Sync"}
+                    </button>
+                  </form>
+                )}
+
+              </div>
             )
           ) : (
-            /* 0.1 CHRONOLOGICAL USER LOGS */
+            /* CHRONOLOGICAL USER LOGS */
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <p className="text-xs text-content-muted">

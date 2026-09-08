@@ -7,6 +7,13 @@
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS"
-  }
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "qleading-db",
+      "database_id": "9769009a-9e29-4137-8a91-1672ebc1e318"
+    }
+  ]
 }
 

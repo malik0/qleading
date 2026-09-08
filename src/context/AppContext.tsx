@@ -10,6 +10,7 @@ import React, {
   ReactNode,
 } from "react";
 import {
+  AccountResetPayload,
   AppSettings,
   DayReadingRecord,
   JuzInfo,
@@ -86,8 +87,19 @@ interface AppContextType {
 
   // User Auth & Sync
   userState: UserState;
-  loginUser: (email: string, name?: string) => Promise<void>;
-  logoutUser: () => void;
+  loginUser: (email: string, password?: string) => Promise<{ success: boolean; error?: string }>;
+  registerUser: (username: string, email: string, password?: string) => Promise<{ success: boolean; error?: string }>;
+  generateRandomUser: () => Promise<{
+    success: boolean;
+    error?: string;
+    credentials?: { username: string; email: string; password?: string };
+  }>;
+  resetAccountDetails: (payload: AccountResetPayload) => Promise<{
+    success: boolean;
+    error?: string;
+    message?: string;
+  }>;
+  logoutUser: () => Promise<void>;
   isSyncing: boolean;
   lastSynced: string | null;
   manualSync: () => Promise<void>;
@@ -113,15 +125,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [lastSynced, setLastSynced] = useState<string | null>(null);
 
   // References for interval tracking
+  // References for interval tracking and stale-closure prevention
   const lastActiveDateRef = useRef(getLocalDateString());
   const timerSecondsRef = useRef(userState.timerSeconds);
   const playbackPosRef = useRef(0);
   const isPlayingRef = useRef(false);
+  const userStateRef = useRef(userState);
+  const settingsRef = useRef(settings);
 
   // Sync refs with state
   useEffect(() => {
+    userStateRef.current = userState;
     timerSecondsRef.current = userState.timerSeconds;
-  }, [userState.timerSeconds]);
+  }, [userState]);
+
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
 
   useEffect(() => {
     playbackPosRef.current = playbackPosition;
@@ -132,6 +152,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [isPlaying]);
 
   // Load from local storage on mount
+  // Load from local storage on mount & check Cloudflare D1 session
   useEffect(() => {
     setIsClient(true);
     const loadedSettings = getStoredSettings();
@@ -151,10 +172,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     setSettings(loadedSettings);
     setUserState(loadedState);
+    userStateRef.current = loadedState;
+    settingsRef.current = loadedSettings;
     setPlaybackPosition(loadedState.playbackPositionSeconds || 0);
     playbackPosRef.current = loadedState.playbackPositionSeconds || 0;
     timerSecondsRef.current = loadedState.timerSeconds || loadedSettings.timerTargetMinutes * 60;
     lastActiveDateRef.current = loadedState.lastActiveDate || getLocalDateString();
+
+    // Check Cloudflare D1 active session and reconcile
+    fetch("/api/auth?action=me")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.authenticated && data?.state) {
+          const merged = reconcileStates(loadedState, data.state);
+          setUserState(merged);
+          userStateRef.current = merged;
+          saveStoredState(merged);
+          if (merged.playbackPositionSeconds > 0) {
+            setPlaybackPosition(merged.playbackPositionSeconds);
+            playbackPosRef.current = merged.playbackPositionSeconds;
+          }
+          setLastSynced(new Date().toLocaleTimeString());
+        }
+      })
+      .catch((e) => console.warn("Session check skipped/offline:", e));
   }, []);
 
   // Construct active Juz list with custom overrides
@@ -272,6 +313,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           ...next,
           updatedAt: new Date().toISOString(),
         };
+        userStateRef.current = timestamped;
         saveStoredState(timestamped);
         return timestamped;
       });
@@ -279,24 +321,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
     []
   );
 
-  // Sync with Cloudflare API endpoint
-  const manualSync = useCallback(async () => {
-    if (!userState.isLoggedIn) return;
+  // Unified Sync with Cloudflare D1
+  const syncWithServer = useCallback(async (customState?: UserState) => {
+    const currentState = customState || userStateRef.current;
+    if (!currentState.isLoggedIn) return;
+
     setIsSyncing(true);
     try {
       const res = await fetch("/api/sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ state: userState, settings }),
+        body: JSON.stringify({ state: currentState, settings: settingsRef.current }),
       });
       if (res.ok) {
         const data = await res.json();
         if (data.remoteState) {
-          const reconciled = reconcileStates(userState, data.remoteState);
+          const reconciled = reconcileStates(currentState, data.remoteState);
           setUserState(reconciled);
+          userStateRef.current = reconciled;
           saveStoredState(reconciled);
-          if (reconciled.currentJuzId !== userState.currentJuzId) {
+          if (reconciled.currentJuzId !== currentState.currentJuzId) {
             setPlaybackPosition(reconciled.playbackPositionSeconds);
+            playbackPosRef.current = reconciled.playbackPositionSeconds;
           }
         }
         setLastSynced(new Date().toLocaleTimeString());
@@ -306,7 +352,36 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsSyncing(false);
     }
-  }, [userState, settings]);
+  }, []);
+
+  const manualSync = useCallback(async () => {
+    await syncWithServer();
+  }, [syncWithServer]);
+
+  // Periodic Auto-Sync during active playback (every 20 seconds)
+  useEffect(() => {
+    if (!isPlaying || !userState.isLoggedIn) return;
+
+    const interval = setInterval(() => {
+      syncWithServer();
+    }, 20000);
+
+    return () => clearInterval(interval);
+  }, [isPlaying, userState.isLoggedIn, syncWithServer]);
+
+  // Tab switch / page hide auto-sync
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden" && userStateRef.current.isLoggedIn) {
+        syncWithServer();
+      }
+    };
+
+    window.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => window.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [syncWithServer]);
 
   // Audio Playback Controls
   const play = useCallback(() => {
@@ -322,8 +397,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (audioRef.current) {
       audioRef.current.pause();
       setIsPlaying(false);
+      // Immediately sync state to server on pause
+      setTimeout(() => {
+        syncWithServer();
+      }, 50);
     }
-  }, []);
+  }, [syncWithServer]);
 
   const togglePlay = useCallback(() => {
     if (isPlaying) {
@@ -399,9 +478,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // Resume playback after switch
       setTimeout(() => {
         play();
+        syncWithServer();
       }, 100);
     },
-    [updateStateAndPersist, play]
+    [updateStateAndPersist, play, syncWithServer]
   );
 
   const cancelJuzSwitch = useCallback(() => {
@@ -583,46 +663,165 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [juzName, currentJuz.id, play, pause, rewind, fastForward, confirmJuzSwitch]);
 
   // User Auth Actions
-  const loginUser = useCallback(async (email: string, name?: string) => {
-    const newState: UserState = {
-      ...userState,
-      userId: "usr_" + btoa(email).substring(0, 12),
-      userEmail: email,
-      userName: name || email.split("@")[0],
-      isLoggedIn: true,
-      updatedAt: new Date().toISOString(),
-    };
-    setUserState(newState);
-    saveStoredState(newState);
-    // Trigger remote sync
+  const generateRandomUser = useCallback(async () => {
+    setIsSyncing(true);
     try {
-      const res = await fetch("/api/sync", {
+      const res = await fetch("/api/auth?action=random", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ state: newState, settings }),
+        body: JSON.stringify({ state: userStateRef.current, settings: settingsRef.current }),
       });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.remoteState) {
-          const merged = reconcileStates(newState, data.remoteState);
-          setUserState(merged);
-          saveStoredState(merged);
-        }
+      const data = await res.json();
+      if (res.ok && data.success) {
+        const merged = reconcileStates(userStateRef.current, data.state);
+        setUserState(merged);
+        userStateRef.current = merged;
+        saveStoredState(merged);
+        setLastSynced(new Date().toLocaleTimeString());
+        return { success: true, credentials: data.randomCredentials };
       }
-    } catch {}
-  }, [userState, settings]);
+      return { success: false, error: data.error || "Failed to generate random account" };
+    } catch (err: any) {
+      return { success: false, error: err.message || "Network error" };
+    } finally {
+      setIsSyncing(false);
+    }
+  }, []);
 
-  const logoutUser = useCallback(() => {
+  const registerUser = useCallback(
+    async (username: string, email: string, password?: string) => {
+      setIsSyncing(true);
+      try {
+        const res = await fetch("/api/auth?action=register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            username,
+            email,
+            password: password || "ql-" + Math.random().toString(36).substring(2, 10),
+            state: userStateRef.current,
+            settings: settingsRef.current,
+          }),
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          const merged = reconcileStates(userStateRef.current, data.state);
+          setUserState(merged);
+          userStateRef.current = merged;
+          saveStoredState(merged);
+          setLastSynced(new Date().toLocaleTimeString());
+          return { success: true };
+        }
+        return { success: false, error: data.error || "Registration failed" };
+      } catch (err: any) {
+        return { success: false, error: err.message || "Network error" };
+      } finally {
+        setIsSyncing(false);
+      }
+    },
+    []
+  );
+
+  const loginUser = useCallback(async (email: string, password?: string) => {
+    setIsSyncing(true);
+    try {
+      const res = await fetch("/api/auth?action=login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email,
+          password: password || "",
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        const merged = reconcileStates(userStateRef.current, data.state);
+        setUserState(merged);
+        userStateRef.current = merged;
+        saveStoredState(merged);
+        setPlaybackPosition(merged.playbackPositionSeconds);
+        playbackPosRef.current = merged.playbackPositionSeconds;
+        setLastSynced(new Date().toLocaleTimeString());
+        return { success: true };
+      }
+      return { success: false, error: data.error || "Invalid email or password" };
+    } catch (err: any) {
+      return { success: false, error: err.message || "Network error" };
+    } finally {
+      setIsSyncing(false);
+    }
+  }, []);
+
+  const resetAccountDetails = useCallback(
+    async (payload: AccountResetPayload) => {
+      setIsSyncing(true);
+      try {
+        const res = await fetch("/api/auth?action=reset", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          setUserState((prev) => {
+            const updated: UserState = {
+              ...prev,
+              userName: data.user?.username || prev.userName,
+              userEmail: data.user?.email || prev.userEmail,
+              ...(payload.resetReadingData
+                ? {
+                    currentJuzId: 1,
+                    playbackPositionSeconds: 0,
+                    timerSeconds: 1800,
+                    historyRecords: {},
+                    userLogs: [],
+                  }
+                : {}),
+              updatedAt: new Date().toISOString(),
+            };
+            userStateRef.current = updated;
+            saveStoredState(updated);
+            return updated;
+          });
+
+          if (payload.resetReadingData) {
+            setPlaybackPosition(0);
+            playbackPosRef.current = 0;
+            if (audioRef.current) {
+              audioRef.current.currentTime = 0;
+            }
+          }
+
+          setLastSynced(new Date().toLocaleTimeString());
+          return { success: true, message: data.message };
+        }
+        return { success: false, error: data.error || "Failed to reset account details" };
+      } catch (err: any) {
+        return { success: false, error: err.message || "Network error" };
+      } finally {
+        setIsSyncing(false);
+      }
+    },
+    []
+  );
+
+  const logoutUser = useCallback(async () => {
+    try {
+      await fetch("/api/auth?action=logout", { method: "POST" });
+    } catch {}
+
     const loggedOutState: UserState = {
-      ...userState,
+      ...userStateRef.current,
       isLoggedIn: false,
       userEmail: "",
       userName: "Guest User",
       updatedAt: new Date().toISOString(),
     };
     setUserState(loggedOutState);
+    userStateRef.current = loggedOutState;
     saveStoredState(loggedOutState);
-  }, [userState]);
+    setLastSynced(null);
+  }, []);
 
   // Today's reading record
   const todayKey = getLocalDateString();
@@ -678,6 +877,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         userLogs: userState.userLogs || [],
         userState,
         loginUser,
+        registerUser,
+        generateRandomUser,
+        resetAccountDetails,
         logoutUser,
         isSyncing,
         lastSynced,
