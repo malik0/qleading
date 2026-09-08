@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Next.js build output
+.next/
+out/
+
+# OpenNext & Cloudflare build output
+.open-next/
+.wrangler/
+
+# TypeScript build info
+*.tsbuildinfo
+next-env.d.ts
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment files
+.env*.local
+.env
+
+# OS Files
+.DS_Store
+Thumbs.db
+

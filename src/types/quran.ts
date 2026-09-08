@@ -1,0 +1,81 @@
+export interface JuzInfo {
+  id: number;
+  defaultName: string;
+  customName?: string;
+  defaultRange: string;
+  customRange?: string;
+  localAudioUrl: string;
+  cdnAudioUrl: string;
+  approxDurationSeconds: number;
+}
+
+export type PlaybackSpeed = 0.5 | 1.0 | 1.25 | 1.5 | 1.75 | 2.0;
+export type TimerMode = 'countdown' | 'countup';
+export type DayOfWeek = 0 | 1 | 2 | 3 | 4 | 5 | 6; // 0 = Sunday, 1 = Monday, etc.
+export type ThemeMode = 'dark' | 'light' | 'system';
+export type ThemeColor =
+  | 'sky'
+  | 'emerald'
+  | 'amber'
+  | 'sepia'
+  | 'indigo'
+  | 'teal'
+  | 'rose'
+  | 'purple'
+  | 'olive'
+  | 'oled'
+  | 'coral'
+  | 'slate';
+
+export interface AppSettings {
+  rewindStepSeconds: number;
+  forwardStepSeconds: number;
+  timerTargetMinutes: number;
+  timerMode: TimerMode;
+  streakStartDay: DayOfWeek;
+  preferLocalAudio: boolean;
+  themeMode: ThemeMode;
+  themeColor: ThemeColor;
+  customJuzNames: Record<number, string>;
+  customJuzRanges: Record<number, string>;
+}
+
+export interface DayReadingRecord {
+  date: string; // YYYY-MM-DD
+  secondsRead: number;
+  targetReached: boolean;
+  // 96 slots in 24 hours (15 min each: index 0 to 95)
+  // Each slot stores seconds read during that 15-min interval
+  slots: Record<number, number>;
+}
+
+export interface UserLogEntry {
+  id: string;
+  timestamp: string; // ISO string
+  juzId: number;
+  juzName: string;
+  durationSeconds: number;
+  playbackSpeed: number;
+  action: 'listen' | 'complete_juz' | 'target_reached';
+}
+
+export interface UserState {
+  userId: string;
+  userName: string;
+  userEmail: string;
+  isLoggedIn: boolean;
+  currentJuzId: number;
+  playbackPositionSeconds: number; // saved each second
+  timerSeconds: number; // saved each second
+  timerTargetMinutes: number;
+  lastActiveDate: string; // YYYY-MM-DD
+  updatedAt: string; // ISO string for conflict resolution
+  historyRecords: Record<string, DayReadingRecord>; // keyed by YYYY-MM-DD
+  userLogs: UserLogEntry[];
+}
+
+export interface SyncPayload {
+  state: UserState;
+  settings: AppSettings;
+}
+

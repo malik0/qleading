@@ -1,0 +1,488 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Default Light Mode Surfaces */
+  --bg-base: #f8fafc;
+  --bg-card: #ffffff;
+  --bg-card-subtle: #f1f5f9;
+  --bg-card-hover: #e2e8f0;
+  --border-base: #e2e8f0;
+  --border-subtle: #cbd5e1;
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+
+  /* Default Sky Theme */
+  --color-primary: #0284c7;
+  --color-primary-rgb: 2, 132, 199;
+  --color-primary-hover: #0369a1;
+  --color-primary-light: #e0f2fe;
+  --color-primary-glow: rgba(2, 132, 199, 0.25);
+}
+
+.dark {
+  /* Dark Mode Surfaces */
+  --bg-base: #020617;
+  --bg-card: #0f172a;
+  --bg-card-subtle: #1e293b;
+  --bg-card-hover: #334155;
+  --border-base: #1e293b;
+  --border-subtle: #334155;
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+
+  /* Dark Sky Theme */
+  --color-primary: #38bdf8;
+  --color-primary-rgb: 56, 189, 248;
+  --color-primary-hover: #7dd3fc;
+  --color-primary-light: rgba(56, 189, 248, 0.15);
+  --color-primary-glow: rgba(56, 189, 248, 0.35);
+}
+
+/* 1. SKY THEME (Celestial Sky - Modern Crisp Default) */
+[data-theme-color="sky"] {
+  --bg-base: #f8fafc;
+  --bg-card: #ffffff;
+  --bg-card-subtle: #f1f5f9;
+  --bg-card-hover: #e2e8f0;
+  --border-base: #e2e8f0;
+  --border-subtle: #cbd5e1;
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+  --color-primary: #0284c7;
+  --color-primary-rgb: 2, 132, 199;
+  --color-primary-hover: #0369a1;
+  --color-primary-light: #e0f2fe;
+  --color-primary-glow: rgba(2, 132, 199, 0.25);
+}
+.dark[data-theme-color="sky"], [data-theme-color="sky"].dark, .dark [data-theme-color="sky"] {
+  --bg-base: #020617;
+  --bg-card: #0f172a;
+  --bg-card-subtle: #1e293b;
+  --bg-card-hover: #334155;
+  --border-base: #1e293b;
+  --border-subtle: #334155;
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --color-primary: #38bdf8;
+  --color-primary-rgb: 56, 189, 248;
+  --color-primary-hover: #7dd3fc;
+  --color-primary-light: rgba(56, 189, 248, 0.15);
+  --color-primary-glow: rgba(56, 189, 248, 0.35);
+}
+
+/* 2. EMERALD GREEN THEME (Madinah Emerald - Sacred Islamic Green) */
+[data-theme-color="emerald"] {
+  --bg-base: #f0fdf4;
+  --bg-card: #ffffff;
+  --bg-card-subtle: #f2fbf5;
+  --bg-card-hover: #dcfce7;
+  --border-base: #dcfce7;
+  --border-subtle: #bbf7d0;
+  --text-primary: #064e3b;
+  --text-secondary: #065f46;
+  --text-muted: #047857;
+  --color-primary: #059669;
+  --color-primary-rgb: 5, 150, 105;
+  --color-primary-hover: #047857;
+  --color-primary-light: #d1fae5;
+  --color-primary-glow: rgba(5, 150, 105, 0.25);
+}
+.dark[data-theme-color="emerald"], [data-theme-color="emerald"].dark, .dark [data-theme-color="emerald"] {
+  --bg-base: #021a12;
+  --bg-card: #062820;
+  --bg-card-subtle: #0d382d;
+  --bg-card-hover: #14493b;
+  --border-base: #0e4436;
+  --border-subtle: #195b49;
+  --text-primary: #ecfdf5;
+  --text-secondary: #a7f3d0;
+  --text-muted: #6ee7b7;
+  --color-primary: #10b981;
+  --color-primary-rgb: 16, 185, 129;
+  --color-primary-hover: #34d399;
+  --color-primary-light: rgba(16, 185, 129, 0.15);
+  --color-primary-glow: rgba(16, 185, 129, 0.35);
+}
+
+/* 3. SEPIA MANUSCRIPT (Warm Quran Parchment & Antique Leather) */
+[data-theme-color="sepia"] {
+  --bg-base: #fbf7ee;
+  --bg-card: #f5efe1;
+  --bg-card-subtle: #ebe1cd;
+  --bg-card-hover: #dfd3bb;
+  --border-base: #dfd2b9;
+  --border-subtle: #cdbda1;
+  --text-primary: #291f14;
+  --text-secondary: #4d3d2a;
+  --text-muted: #7c6850;
+  --color-primary: #925828;
+  --color-primary-rgb: 146, 88, 40;
+  --color-primary-hover: #78451b;
+  --color-primary-light: #eddccb;
+  --color-primary-glow: rgba(146, 88, 40, 0.25);
+}
+.dark[data-theme-color="sepia"], [data-theme-color="sepia"].dark, .dark [data-theme-color="sepia"] {
+  --bg-base: #14110d;
+  --bg-card: #1f1a14;
+  --bg-card-subtle: #2d261e;
+  --bg-card-hover: #3c342a;
+  --border-base: #332b21;
+  --border-subtle: #4b3f32;
+  --text-primary: #f6efe6;
+  --text-secondary: #dacbbb;
+  --text-muted: #a69480;
+  --color-primary: #d49553;
+  --color-primary-rgb: 212, 149, 83;
+  --color-primary-hover: #e5ab6e;
+  --color-primary-light: rgba(212, 149, 83, 0.15);
+  --color-primary-glow: rgba(212, 149, 83, 0.35);
+}
+
+/* 4. AMBER GOLD THEME (Desert Sunrise & Gold) */
+[data-theme-color="amber"] {
+  --bg-base: #fffbeb;
+  --bg-card: #ffffff;
+  --bg-card-subtle: #fef3c7;
+  --bg-card-hover: #fde68a;
+  --border-base: #fde68a;
+  --border-subtle: #fcd34d;
+  --text-primary: #451a03;
+  --text-secondary: #78350f;
+  --text-muted: #92400e;
+  --color-primary: #d97706;
+  --color-primary-rgb: 217, 119, 6;
+  --color-primary-hover: #b45309;
+  --color-primary-light: #fef3c7;
+  --color-primary-glow: rgba(217, 119, 6, 0.25);
+}
+.dark[data-theme-color="amber"], [data-theme-color="amber"].dark, .dark [data-theme-color="amber"] {
+  --bg-base: #141008;
+  --bg-card: #211b0e;
+  --bg-card-subtle: #302816;
+  --bg-card-hover: #42371e;
+  --border-base: #3b3017;
+  --border-subtle: #57461e;
+  --text-primary: #fef3c7;
+  --text-secondary: #fde68a;
+  --text-muted: #fbbf24;
+  --color-primary: #fbbf24;
+  --color-primary-rgb: 251, 191, 36;
+  --color-primary-hover: #fcd34d;
+  --color-primary-light: rgba(251, 191, 36, 0.15);
+  --color-primary-glow: rgba(251, 191, 36, 0.35);
+}
+
+/* 5. ROYAL INDIGO THEME (Contemplative Deep Violet) */
+[data-theme-color="indigo"] {
+  --bg-base: #f5f6ff;
+  --bg-card: #ffffff;
+  --bg-card-subtle: #e0e7ff;
+  --bg-card-hover: #c7d2fe;
+  --border-base: #c7d2fe;
+  --border-subtle: #a5b4fc;
+  --text-primary: #1e1b4b;
+  --text-secondary: #312e81;
+  --text-muted: #4338ca;
+  --color-primary: #4f46e5;
+  --color-primary-rgb: 79, 70, 229;
+  --color-primary-hover: #4338ca;
+  --color-primary-light: #e0e7ff;
+  --color-primary-glow: rgba(79, 70, 229, 0.25);
+}
+.dark[data-theme-color="indigo"], [data-theme-color="indigo"].dark, .dark [data-theme-color="indigo"] {
+  --bg-base: #060818;
+  --bg-card: #0e122b;
+  --bg-card-subtle: #171d42;
+  --bg-card-hover: #222a59;
+  --border-base: #1f2757;
+  --border-subtle: #2e3977;
+  --text-primary: #e0e7ff;
+  --text-secondary: #c7d2fe;
+  --text-muted: #818cf8;
+  --color-primary: #818cf8;
+  --color-primary-rgb: 129, 140, 248;
+  --color-primary-hover: #a5b4fc;
+  --color-primary-light: rgba(129, 140, 248, 0.15);
+  --color-primary-glow: rgba(129, 140, 248, 0.35);
+}
+
+/* 6. TEAL OASIS THEME (Ocean Turquoise) */
+[data-theme-color="teal"] {
+  --bg-base: #f0fdfa;
+  --bg-card: #ffffff;
+  --bg-card-subtle: #ccfbf1;
+  --bg-card-hover: #99f6e4;
+  --border-base: #99f6e4;
+  --border-subtle: #5eead4;
+  --text-primary: #134e4a;
+  --text-secondary: #115e59;
+  --text-muted: #0f766e;
+  --color-primary: #0d9488;
+  --color-primary-rgb: 13, 148, 136;
+  --color-primary-hover: #0f766e;
+  --color-primary-light: #ccfbf1;
+  --color-primary-glow: rgba(13, 148, 136, 0.25);
+}
+.dark[data-theme-color="teal"], [data-theme-color="teal"].dark, .dark [data-theme-color="teal"] {
+  --bg-base: #021614;
+  --bg-card: #072522;
+  --bg-card-subtle: #0f3733;
+  --bg-card-hover: #174a44;
+  --border-base: #14443f;
+  --border-subtle: #205e57;
+  --text-primary: #f0fdfa;
+  --text-secondary: #99f6e4;
+  --text-muted: #2dd4bf;
+  --color-primary: #2dd4bf;
+  --color-primary-rgb: 45, 212, 191;
+  --color-primary-hover: #5eead4;
+  --color-primary-light: rgba(45, 212, 191, 0.15);
+  --color-primary-glow: rgba(45, 212, 191, 0.35);
+}
+
+/* 7. ROSE RUBY THEME (Warm Crimson) */
+[data-theme-color="rose"] {
+  --bg-base: #fff1f2;
+  --bg-card: #ffffff;
+  --bg-card-subtle: #ffe4e6;
+  --bg-card-hover: #fecdd3;
+  --border-base: #fecdd3;
+  --border-subtle: #fda4af;
+  --text-primary: #4c0519;
+  --text-secondary: #881337;
+  --text-muted: #be123c;
+  --color-primary: #e11d48;
+  --color-primary-rgb: 225, 29, 72;
+  --color-primary-hover: #be123c;
+  --color-primary-light: #ffe4e6;
+  --color-primary-glow: rgba(225, 29, 72, 0.25);
+}
+.dark[data-theme-color="rose"], [data-theme-color="rose"].dark, .dark [data-theme-color="rose"] {
+  --bg-base: #17050a;
+  --bg-card: #250a12;
+  --bg-card-subtle: #36101c;
+  --bg-card-hover: #491727;
+  --border-base: #421321;
+  --border-subtle: #5f1b31;
+  --text-primary: #ffe4e6;
+  --text-secondary: #fecdd3;
+  --text-muted: #fb7185;
+  --color-primary: #fb7185;
+  --color-primary-rgb: 251, 113, 133;
+  --color-primary-hover: #fda4af;
+  --color-primary-light: rgba(251, 113, 133, 0.15);
+  --color-primary-glow: rgba(251, 113, 133, 0.35);
+}
+
+/* 8. PURPLE AMETHYST THEME (Spiritual Violet) */
+[data-theme-color="purple"] {
+  --bg-base: #faf5ff;
+  --bg-card: #ffffff;
+  --bg-card-subtle: #f3e8ff;
+  --bg-card-hover: #e9d5ff;
+  --border-base: #e9d5ff;
+  --border-subtle: #d8b4fe;
+  --text-primary: #3b0764;
+  --text-secondary: #581c87;
+  --text-muted: #7e22ce;
+  --color-primary: #9333ea;
+  --color-primary-rgb: 147, 51, 234;
+  --color-primary-hover: #7e22ce;
+  --color-primary-light: #f3e8ff;
+  --color-primary-glow: rgba(147, 51, 234, 0.25);
+}
+.dark[data-theme-color="purple"], [data-theme-color="purple"].dark, .dark [data-theme-color="purple"] {
+  --bg-base: #12061e;
+  --bg-card: #1d0c2e;
+  --bg-card-subtle: #2c1444;
+  --bg-card-hover: #3d1c5d;
+  --border-base: #351652;
+  --border-subtle: #50217c;
+  --text-primary: #f3e8ff;
+  --text-secondary: #d8b4fe;
+  --text-muted: #c084fc;
+  --color-primary: #c084fc;
+  --color-primary-rgb: 192, 132, 252;
+  --color-primary-hover: #d8b4fe;
+  --color-primary-light: rgba(192, 132, 252, 0.15);
+  --color-primary-glow: rgba(192, 132, 252, 0.35);
+}
+
+/* 9. OLIVE GROVE THEME (Calming Natural Sage) */
+[data-theme-color="olive"] {
+  --bg-base: #f7f8f2;
+  --bg-card: #ffffff;
+  --bg-card-subtle: #ecede2;
+  --bg-card-hover: #dedfd1;
+  --border-base: #d8d9c8;
+  --border-subtle: #c2c4ac;
+  --text-primary: #1f2411;
+  --text-secondary: #3b4224;
+  --text-muted: #5e683e;
+  --color-primary: #65a30d;
+  --color-primary-rgb: 101, 163, 13;
+  --color-primary-hover: #4d7c0f;
+  --color-primary-light: #ecfccb;
+  --color-primary-glow: rgba(101, 163, 13, 0.25);
+}
+.dark[data-theme-color="olive"], [data-theme-color="olive"].dark, .dark [data-theme-color="olive"] {
+  --bg-base: #10140c;
+  --bg-card: #1a2014;
+  --bg-card-subtle: #262e1e;
+  --bg-card-hover: #333d28;
+  --border-base: #2c3622;
+  --border-subtle: #414f33;
+  --text-primary: #f4f7ed;
+  --text-secondary: #d9e2c7;
+  --text-muted: #a3e635;
+  --color-primary: #a3e635;
+  --color-primary-rgb: 163, 230, 53;
+  --color-primary-hover: #bef264;
+  --color-primary-light: rgba(163, 230, 53, 0.15);
+  --color-primary-glow: rgba(163, 230, 53, 0.35);
+}
+
+/* 10. MIDNIGHT OLED THEME (Pure Pitch Black #000000 for OLED) */
+[data-theme-color="oled"] {
+  --bg-base: #ffffff;
+  --bg-card: #f8fafc;
+  --bg-card-subtle: #f1f5f9;
+  --bg-card-hover: #e2e8f0;
+  --border-base: #e2e8f0;
+  --border-subtle: #cbd5e1;
+  --text-primary: #000000;
+  --text-secondary: #1e293b;
+  --text-muted: #64748b;
+  --color-primary: #0284c7;
+  --color-primary-rgb: 2, 132, 199;
+  --color-primary-hover: #0369a1;
+  --color-primary-light: #e0f2fe;
+  --color-primary-glow: rgba(2, 132, 199, 0.2);
+}
+.dark[data-theme-color="oled"], [data-theme-color="oled"].dark, .dark [data-theme-color="oled"] {
+  --bg-base: #000000;
+  --bg-card: #0a0a0d;
+  --bg-card-subtle: #14141a;
+  --bg-card-hover: #202028;
+  --border-base: #1f1f28;
+  --border-subtle: #2f2f3e;
+  --text-primary: #ffffff;
+  --text-secondary: #e2e8f0;
+  --text-muted: #94a3b8;
+  --color-primary: #38bdf8;
+  --color-primary-rgb: 56, 189, 248;
+  --color-primary-hover: #7dd3fc;
+  --color-primary-light: rgba(56, 189, 248, 0.15);
+  --color-primary-glow: rgba(56, 189, 248, 0.45);
+}
+
+/* 11. SUNSET CORAL THEME (Warm Terracotta) */
+[data-theme-color="coral"] {
+  --bg-base: #fff7ed;
+  --bg-card: #ffffff;
+  --bg-card-subtle: #ffedd5;
+  --bg-card-hover: #fed7aa;
+  --border-base: #fed7aa;
+  --border-subtle: #fdba74;
+  --text-primary: #431407;
+  --text-secondary: #7c2d12;
+  --text-muted: #c2410c;
+  --color-primary: #ea580c;
+  --color-primary-rgb: 234, 88, 12;
+  --color-primary-hover: #c2410c;
+  --color-primary-light: #ffedd5;
+  --color-primary-glow: rgba(234, 88, 12, 0.25);
+}
+.dark[data-theme-color="coral"], [data-theme-color="coral"].dark, .dark [data-theme-color="coral"] {
+  --bg-base: #180a04;
+  --bg-card: #271309;
+  --bg-card-subtle: #3a1d0f;
+  --bg-card-hover: #4e2716;
+  --border-base: #462211;
+  --border-subtle: #633219;
+  --text-primary: #ffedd5;
+  --text-secondary: #fed7aa;
+  --text-muted: #fb923c;
+  --color-primary: #fb923c;
+  --color-primary-rgb: 251, 146, 60;
+  --color-primary-hover: #fdba74;
+  --color-primary-light: rgba(251, 146, 60, 0.15);
+  --color-primary-glow: rgba(251, 146, 60, 0.35);
+}
+
+/* 12. MINIMALIST SLATE THEME (Clean Monochromatic Grayscale) */
+[data-theme-color="slate"] {
+  --bg-base: #f8fafc;
+  --bg-card: #ffffff;
+  --bg-card-subtle: #f1f5f9;
+  --bg-card-hover: #e2e8f0;
+  --border-base: #e2e8f0;
+  --border-subtle: #cbd5e1;
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+  --color-primary: #475569;
+  --color-primary-rgb: 71, 85, 105;
+  --color-primary-hover: #334155;
+  --color-primary-light: #e2e8f0;
+  --color-primary-glow: rgba(71, 85, 105, 0.25);
+}
+.dark[data-theme-color="slate"], [data-theme-color="slate"].dark, .dark [data-theme-color="slate"] {
+  --bg-base: #090d16;
+  --bg-card: #121826;
+  --bg-card-subtle: #1c2438;
+  --bg-card-hover: #29344d;
+  --border-base: #242f47;
+  --border-subtle: #37476b;
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --color-primary: #94a3b8;
+  --color-primary-rgb: 148, 163, 184;
+  --color-primary-hover: #cbd5e1;
+  --color-primary-light: rgba(148, 163, 184, 0.15);
+  --color-primary-glow: rgba(148, 163, 184, 0.3);
+}
+
+@layer base {
+  body {
+    @apply antialiased min-h-screen selection:bg-brand-light selection:text-brand-primary;
+    background-color: var(--bg-base);
+    color: var(--text-primary);
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
+
+/* Custom Scrollbars adapted to primary theme */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-card-subtle);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(var(--color-primary-rgb), 0.3);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(var(--color-primary-rgb), 0.6);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.18s ease-out forwards;
+}
