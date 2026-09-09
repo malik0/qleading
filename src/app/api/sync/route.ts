@@ -127,7 +127,13 @@ export async function POST(req: Request) {
       // First time save into Cloudflare D1
       const historyJson = JSON.stringify(clientState.historyRecords || {});
       const logsJson = JSON.stringify(clientState.userLogs || []);
-      const settingsJson = JSON.stringify(body.settings || {});
+      const settingsPayload = {
+        ...(body.settings || {}),
+        completedJuzs: clientState.completedJuzs || [],
+        juzTally: clientState.juzTally || 0,
+        khatmPlan: clientState.khatmPlan || body.settings?.khatmPlan || null,
+      };
+      const settingsJson = JSON.stringify(settingsPayload);
 
       await db
         .prepare(`
@@ -272,7 +278,42 @@ export async function POST(req: Request) {
 
     const mergedHistoryJson = JSON.stringify(mergedHistory);
     const mergedLogsJson = JSON.stringify(mergedLogs);
-    const settingsJson = JSON.stringify(body.settings || {});
+    let existingSettings: any = {};
+    try {
+      existingSettings = JSON.parse(existingRow.settings_json || "{}");
+    } catch {}
+
+    const resolvedCompletedJuzs = Array.from(
+      new Set([
+        ...(clientState.completedJuzs || []),
+        ...(existingSettings.completedJuzs || []),
+      ])
+    ).sort((a, b) => a - b);
+
+    const resolvedJuzTally = Math.max(
+      clientState.juzTally || 0,
+      existingSettings.juzTally || 0,
+      resolvedCompletedJuzs.length
+    );
+
+    // Resolve khatmPlan: latest updatedAt wins
+    const clientKhatm = clientState.khatmPlan || body.settings?.khatmPlan;
+    const serverKhatm = existingSettings.khatmPlan;
+    let resolvedKhatm = clientKhatm || serverKhatm || null;
+    if (clientKhatm && serverKhatm) {
+      const cTime = new Date(clientKhatm.updatedAt || 0).getTime();
+      const sTime = new Date(serverKhatm.updatedAt || 0).getTime();
+      resolvedKhatm = sTime >= cTime ? serverKhatm : clientKhatm;
+    }
+
+    const settingsPayload = {
+      ...existingSettings,
+      ...(body.settings || {}),
+      completedJuzs: resolvedCompletedJuzs,
+      juzTally: resolvedJuzTally,
+      khatmPlan: resolvedKhatm,
+    };
+    const settingsJson = JSON.stringify(settingsPayload);
 
     // Save reconciled state into Cloudflare D1
     await db
@@ -320,6 +361,9 @@ export async function POST(req: Request) {
       userLogs: mergedLogs,
       activeDeviceId: resolvedActiveDeviceId || undefined,
       isPlaying: Boolean(resolvedIsPlaying),
+      completedJuzs: resolvedCompletedJuzs,
+      juzTally: resolvedJuzTally,
+      khatmPlan: resolvedKhatm,
     };
 
     return NextResponse.json({
@@ -386,6 +430,11 @@ export async function GET(req: Request) {
       userLogs = JSON.parse(row.user_logs_json || "[]");
     } catch {}
 
+    let parsedSettings: any = {};
+    try {
+      parsedSettings = JSON.parse(row.settings_json || "{}");
+    } catch {}
+
     const state: UserState = {
       userId,
       userName: user?.username || "Reader",
@@ -401,6 +450,9 @@ export async function GET(req: Request) {
       userLogs,
       activeDeviceId: row.active_device_id || undefined,
       isPlaying: Boolean(row.is_playing),
+      completedJuzs: parsedSettings.completedJuzs || [],
+      juzTally: parsedSettings.juzTally || 0,
+      khatmPlan: parsedSettings.khatmPlan || null,
     };
 
     return NextResponse.json({ success: true, state });

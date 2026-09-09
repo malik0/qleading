@@ -33,6 +33,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   defaultPlaybackSpeed: 1.0,
   customJuzNames: {},
   customJuzRanges: {},
+  khatmPlan: null,
 };
 
 export const INITIAL_USER_STATE: UserState = {
@@ -52,6 +53,7 @@ export const INITIAL_USER_STATE: UserState = {
   isPlaying: false,
   completedJuzs: [],
   juzTally: 0,
+  khatmPlan: null,
 };
 
 export function getStoredSettings(): AppSettings {
@@ -213,6 +215,19 @@ export function reconcileStates(local: UserState, remote: UserState): UserState 
     mergedCompletedJuzs.length
   );
 
+  const localKhatm = local.khatmPlan;
+  const remoteKhatm = remote.khatmPlan;
+  let mergedKhatm = localKhatm;
+  if (remoteKhatm) {
+    if (!localKhatm) {
+      mergedKhatm = remoteKhatm;
+    } else {
+      const localTime = new Date(localKhatm.updatedAt || 0).getTime();
+      const remoteTime = new Date(remoteKhatm.updatedAt || 0).getTime();
+      mergedKhatm = remoteTime >= localTime ? remoteKhatm : localKhatm;
+    }
+  }
+
   return {
     ...base,
     ...authIdentity,
@@ -220,6 +235,7 @@ export function reconcileStates(local: UserState, remote: UserState): UserState 
     userLogs: mergedLogs,
     completedJuzs: mergedCompletedJuzs,
     juzTally: mergedTally,
+    khatmPlan: mergedKhatm,
   };
 }
 

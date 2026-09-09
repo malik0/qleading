@@ -87,20 +87,20 @@ export const TimerModal: React.FC<TimerModalProps> = ({ isOpen, onClose }) => {
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-fadeIn"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-md animate-fadeIn"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="bg-surface-card border border-surface-border rounded-3xl max-w-lg w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden transition-colors duration-200">
+      <div className="bg-surface-card border border-surface-border rounded-2xl sm:rounded-3xl max-w-lg w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden transition-colors duration-200">
         {/* Modal Header */}
-        <div className="flex items-center justify-between p-5 sm:p-6 border-b border-surface-border">
+        <div className="flex items-center justify-between p-4 sm:p-6 border-b border-surface-border">
           <div className="flex items-center gap-2.5">
-            <div className="p-2.5 rounded-xl bg-brand-light text-brand-primary">
-              <Clock className="w-5 h-5" />
+            <div className="p-2 sm:p-2.5 rounded-xl bg-brand-light text-brand-primary shrink-0">
+              <Clock className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-content-primary">
+              <h3 className="text-base sm:text-lg font-bold text-content-primary">
                 Main Reading Timer
               </h3>
               <p className="text-xs text-content-muted">
@@ -111,14 +111,14 @@ export const TimerModal: React.FC<TimerModalProps> = ({ isOpen, onClose }) => {
           <button
             onClick={onClose}
             title="Close"
-            className="p-2 rounded-xl bg-surface-subtle hover:bg-surface-hover text-content-muted hover:text-content-primary transition"
+            className="p-1.5 sm:p-2 rounded-xl bg-surface-subtle hover:bg-surface-hover text-content-muted hover:text-content-primary transition"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Modal Body */}
-        <div className="p-5 sm:p-6 space-y-6 max-h-[80vh] overflow-y-auto">
+        <div className="p-4 sm:p-6 space-y-5 sm:space-y-6 max-h-[80vh] overflow-y-auto">
           {/* Live Timer Status Card with Quick Reset */}
           <div className="bg-surface-subtle border border-surface-border rounded-2xl p-4 sm:p-5 text-center relative overflow-hidden">
             <div className="flex items-center justify-between text-xs text-content-muted mb-2">
@@ -148,7 +148,7 @@ export const TimerModal: React.FC<TimerModalProps> = ({ isOpen, onClose }) => {
             {/* Reset Button */}
             <button
               onClick={handleResetTimer}
-              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-surface-card hover:bg-surface-hover border border-surface-border text-content-primary hover:border-brand-primary/50 font-semibold text-sm transition shadow-sm group active:scale-[0.98]"
+              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-surface-card hover:bg-surface-hover border border-surface-border text-content-primary hover:border-brand-primary/50 font-semibold text-xs sm:text-sm transition shadow-sm group active:scale-[0.98] cursor-pointer"
             >
               <RotateCcw className="w-4 h-4 text-brand-primary group-hover:-rotate-45 transition duration-200" />
               <span>Reset Timer to Default</span>
@@ -167,7 +167,7 @@ export const TimerModal: React.FC<TimerModalProps> = ({ isOpen, onClose }) => {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Sliders className="w-4 h-4 text-brand-primary" />
-                <h4 className="text-sm font-bold text-content-primary">
+                <h4 className="text-xs sm:text-sm font-bold text-content-primary">
                   Default Timer Duration
                 </h4>
               </div>
@@ -189,7 +189,7 @@ export const TimerModal: React.FC<TimerModalProps> = ({ isOpen, onClose }) => {
                       key={mins}
                       type="button"
                       onClick={() => handleQuickPreset(mins)}
-                      className={`py-1.5 px-2 rounded-xl text-xs font-semibold font-mono transition border ${
+                      className={`py-1.5 px-2 rounded-xl text-xs font-semibold font-mono transition border cursor-pointer ${
                         isSelected
                           ? "bg-brand-primary text-white border-brand-primary shadow-md font-bold"
                           : "bg-surface-subtle hover:bg-surface-hover text-content-secondary border-surface-border"
@@ -212,7 +212,7 @@ export const TimerModal: React.FC<TimerModalProps> = ({ isOpen, onClose }) => {
                   type="button"
                   onClick={() => handleAdjustStep(-5)}
                   title="Decrease by 5 minutes"
-                  className="p-2.5 rounded-xl bg-surface-subtle hover:bg-surface-hover border border-surface-border text-content-secondary hover:text-content-primary transition"
+                  className="p-2.5 rounded-xl bg-surface-subtle hover:bg-surface-hover border border-surface-border text-content-secondary hover:text-content-primary transition cursor-pointer"
                 >
                   <Minus className="w-4 h-4" />
                 </button>
@@ -232,7 +232,7 @@ export const TimerModal: React.FC<TimerModalProps> = ({ isOpen, onClose }) => {
                   type="button"
                   onClick={() => handleAdjustStep(5)}
                   title="Increase by 5 minutes"
-                  className="p-2.5 rounded-xl bg-surface-subtle hover:bg-surface-hover border border-surface-border text-content-secondary hover:text-content-primary transition"
+                  className="p-2.5 rounded-xl bg-surface-subtle hover:bg-surface-hover border border-surface-border text-content-secondary hover:text-content-primary transition cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
                 </button>
@@ -260,18 +260,18 @@ export const TimerModal: React.FC<TimerModalProps> = ({ isOpen, onClose }) => {
         </div>
 
         {/* Modal Footer */}
-        <div className="flex items-center justify-end gap-2.5 p-4 sm:p-5 border-t border-surface-border bg-surface-subtle/40">
+        <div className="flex items-center justify-end gap-2.5 p-3 sm:p-4 border-t border-surface-border bg-surface-subtle/40">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded-xl text-xs font-semibold text-content-secondary hover:text-content-primary hover:bg-surface-hover transition"
+            className="px-4 py-2 rounded-xl text-xs font-semibold text-content-secondary hover:text-content-primary hover:bg-surface-hover transition cursor-pointer"
           >
             Cancel
           </button>
           <button
             type="button"
             onClick={handleSaveAndApply}
-            className="flex items-center gap-1.5 px-5 py-2 rounded-xl bg-brand-primary hover:bg-brand-hover text-white text-xs font-bold shadow-md transition active:scale-95"
+            className="flex items-center gap-1.5 px-4 sm:px-5 py-2 rounded-xl bg-brand-primary hover:bg-brand-hover text-white text-xs font-bold shadow-md transition active:scale-95 cursor-pointer"
           >
             <Check className="w-4 h-4" />
             <span>Save & Apply</span>

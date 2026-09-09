@@ -7,6 +7,7 @@ import { PlaybackControls } from "../components/PlaybackControls";
 import { StreakCounter } from "../components/StreakCounter";
 import { ReadingChart } from "../components/ReadingChart";
 import { JuzListTable } from "../components/JuzListTable";
+import { KhatmPlanner } from "../components/KhatmPlanner";
 import { SettingsModal } from "../components/SettingsModal";
 import { UserAuthModal } from "../components/UserAuthModal";
 import { ConfirmSwitchModal } from "../components/ConfirmSwitchModal";
@@ -32,7 +33,7 @@ export default function Home() {
       />
 
       {/* Main Container */}
-      <main className="flex-1 max-w-4xl w-full mx-auto px-4 py-4 sm:py-6 sm:px-6 space-y-4 sm:space-y-6">
+      <main className="flex-1 max-w-4xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
         {/* 1.0 - 1.4 JUZ DISPLAY & HERO TIMER */}
         <JuzDisplay />
 
@@ -47,12 +48,14 @@ export default function Home() {
 
         {/* 6.0 THE 30 JUZ LIST AT THE BOTTOM OF THE PAGE */}
         <JuzListTable />
+
+        {/* 7.0 KHATM PLANNER (LISTENING JOURNEY & BRICK PROGRESS TOWARD FINISH LINE) */}
+        <KhatmPlanner />
       </main>
 
       {/* Footer */}
       <footer className="py-6 border-t border-surface-border text-center text-xs text-content-muted">
         <p>
-          Qleading &copy; {new Date().getFullYear()} — Holy Quran 30 Juz Audio Player & Reading Tracker
           Qleading &copy; {new Date().getFullYear()}
         </p>
       </footer>

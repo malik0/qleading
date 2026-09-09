@@ -80,7 +80,7 @@ export const JuzDisplay: React.FC = () => {
     (todayRecord.completedJuzIds ? todayRecord.completedJuzIds.length : 0);
 
   return (
-    <div className="w-full bg-surface-card border border-surface-border rounded-3xl p-4 sm:p-5 backdrop-blur-xl shadow-2xl relative overflow-hidden transition-colors duration-200">
+    <div className="w-full bg-surface-card border border-surface-border rounded-2xl sm:rounded-3xl p-4 sm:p-5 backdrop-blur-xl shadow-2xl relative overflow-hidden transition-colors duration-200">
       {/* Subtle Background Glows matching active theme */}
       <div
         className="absolute -top-24 -right-24 w-72 h-72 rounded-full blur-3xl pointer-events-none transition-all duration-300"
@@ -98,50 +98,50 @@ export const JuzDisplay: React.FC = () => {
       />
 
       {/* 1.4 MAIN READING TIMER (INTERACTIVE HERO TIMER) */}
-      <div className="flex flex-col items-center justify-center text-center my-2 sm:my-3 relative">
+      <div className="relative flex flex-col items-center justify-center pt-2 pb-4">
+        {/* Clickable Area for Timer Modal */}
         <button
-          type="button"
           onClick={() => setIsTimerModalOpen(true)}
           title="Click to adjust timer default value or reset timer"
-          className="group flex flex-col items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary rounded-3xl px-6 py-2 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
+          className="group flex flex-col items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary rounded-3xl px-3 sm:px-6 py-2 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer max-w-full"
         >
           {/* Requirement 1: The Juz tally of the day should appear as a small filled circle above the date but below the border of the Juz Display */}
           {todayJuzCount > 0 && (
             <div
-              className="flex items-center justify-center gap-1.5 mb-1.5"
+              className="flex items-center gap-1.5 mb-2 px-2.5 py-0.5 rounded-full bg-surface-subtle border border-surface-border shadow-sm"
               title={`${todayJuzCount} Juz completed today`}
             >
-              {Array.from({ length: Math.min(todayJuzCount, 12) }).map((_, idx) => (
-                <span
-                  key={idx}
-                  className="w-2.5 h-2.5 rounded-full bg-brand-primary shadow-sm ring-2 ring-brand-primary/20 transition-all"
-                />
-              ))}
-              {todayJuzCount > 12 && (
-                <span className="text-[10px] font-bold text-brand-primary font-mono leading-none">
-                  +{todayJuzCount - 12}
-                </span>
-              )}
+              <div className="flex items-center gap-1">
+                {Array.from({ length: Math.min(todayJuzCount, 12) }).map((_, idx) => (
+                  <span
+                    key={idx}
+                    className="w-2.5 h-2.5 rounded-full bg-brand-primary shadow-sm ring-1 ring-brand-light animate-fadeIn inline-block"
+                  />
+                ))}
+              </div>
+              <span className="text-[11px] font-semibold text-brand-primary font-mono ml-0.5">
+                {todayJuzCount} {todayJuzCount === 1 ? "Juz" : "Juzs"} today
+              </span>
             </div>
           )}
 
           {/* Active status indicator & Today's Date and Time */}
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-2 mb-1 max-w-full">
             <span
-              className={`w-2 h-2 rounded-full transition-all ${
+              className={`w-2 h-2 rounded-full transition-all shrink-0 ${
                 isTimerRunning
                   ? "bg-brand-primary animate-ping"
                   : "bg-content-muted/40"
               }`}
             />
-            <span className="text-xs font-semibold tracking-wide text-content-muted group-hover:text-brand-primary transition">
+            <span className="text-xs font-semibold tracking-wide text-content-muted group-hover:text-brand-primary transition truncate">
               {formattedDateTime || "\u00A0"}
             </span>
           </div>
 
           {/* Huge Hero Timer Typography */}
           <div
-            className="select-none tracking-tight font-extrabold text-content-primary text-6xl sm:text-7xl md:text-8xl lg:text-9xl font-mono transition-all group-hover:brightness-110"
+            className="select-none tracking-tight font-extrabold text-content-primary text-5xl sm:text-7xl md:text-8xl lg:text-9xl font-mono transition-all group-hover:brightness-110"
             style={{
               filter: "drop-shadow(0 10px 25px var(--color-primary-glow))",
             }}
@@ -152,8 +152,8 @@ export const JuzDisplay: React.FC = () => {
           {/* Small text indicating when it will finish */}
           {currentDateTime && (
             <div className="text-xs sm:text-sm text-content-muted font-medium mt-1 mb-0.5 flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5 text-brand-primary opacity-80" />
-              <span>
+              <Clock className="w-3.5 h-3.5 text-brand-primary opacity-80 shrink-0" />
+              <span className="truncate">
                 {timerSeconds > 0
                   ? `Finishes at ${finishTimeStr}`
                   : "Target completed"}
@@ -163,7 +163,7 @@ export const JuzDisplay: React.FC = () => {
 
           {/* Interactive Hint Pill */}
           <div className="mt-1.5 flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] bg-surface-subtle group-hover:bg-surface-hover border border-surface-border text-content-muted group-hover:text-content-primary transition shadow-sm">
-            <SlidersHorizontal className="w-3 h-3 text-brand-primary group-hover:rotate-90 transition-transform duration-300" />
+            <SlidersHorizontal className="w-3 h-3 text-brand-primary group-hover:rotate-90 transition-transform duration-300 shrink-0" />
             <span>Click to adjust or reset</span>
           </div>
         </button>
@@ -173,18 +173,18 @@ export const JuzDisplay: React.FC = () => {
       <div className="w-full h-px bg-gradient-to-r from-transparent via-surface-border to-transparent my-3 sm:my-4" />
 
       {/* 1.0 & 1.1 JUZ TITLE & SURAH RANGE */}
-      <div className="flex flex-col items-center text-center space-y-1.5 relative">
+      <div className="flex flex-col items-center text-center space-y-1.5 relative px-2">
         {/* Juz Selector Dropdown */}
-        <div className="flex items-center gap-2 relative">
-          <div className="relative inline-block">
+        <div className="flex items-center gap-2 relative max-w-full">
+          <div className="relative inline-block max-w-full">
             <button
               onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-              className="flex items-center gap-2 px-3.5 py-1.5 rounded-2xl bg-surface-subtle hover:bg-surface-hover border border-surface-border text-content-primary font-bold text-base sm:text-lg shadow-md transition group"
+              className="flex items-center gap-2 px-3.5 py-1.5 rounded-2xl bg-surface-subtle hover:bg-surface-hover border border-surface-border text-content-primary font-bold text-base sm:text-lg shadow-md transition group max-w-full"
             >
-              <Volume2 className="w-5 h-5 text-brand-primary group-hover:scale-110 transition" />
-              <span>{juzName}</span>
+              <Volume2 className="w-5 h-5 text-brand-primary group-hover:scale-110 transition shrink-0" />
+              <span className="truncate">{juzName}</span>
               <ChevronDown
-                className={`w-4 h-4 text-content-muted transition-transform duration-200 ${
+                className={`w-4 h-4 text-content-muted transition-transform duration-200 shrink-0 ${
                   isDropdownOpen ? "rotate-180" : ""
                 }`}
               />
@@ -192,7 +192,7 @@ export const JuzDisplay: React.FC = () => {
 
             {/* 1.2 DROPDOWN MENU FOR ALL 30 JUZS */}
             {isDropdownOpen && (
-              <div className="absolute left-1/2 -translate-x-1/2 mt-2 w-80 sm:w-96 max-h-80 overflow-y-auto bg-surface-card border border-surface-border rounded-2xl shadow-2xl p-2 z-50 divide-y divide-surface-border">
+              <div className="absolute left-1/2 -translate-x-1/2 mt-2 w-[90vw] max-w-sm sm:w-96 max-h-80 overflow-y-auto bg-surface-card border border-surface-border rounded-2xl shadow-2xl p-2 z-50 divide-y divide-surface-border">
                 <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-content-muted">
                   Select from 30 Quran Juz
                 </div>
@@ -217,7 +217,7 @@ export const JuzDisplay: React.FC = () => {
                       >
                         <div className="flex items-center gap-2.5">
                           <span
-                            className={`w-6 h-6 rounded-lg flex items-center justify-center font-bold text-xs ${
+                            className={`w-6 h-6 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 ${
                               isCurrent
                                 ? "bg-white/20 text-white"
                                 : "bg-surface-subtle text-content-muted"
@@ -243,13 +243,13 @@ export const JuzDisplay: React.FC = () => {
           </div>
         </div>
 
-        {/* 1.1 Juz Range currently playing */}
+        {/* 1.1 Juz Range currently playing (Without 'Surah range:' prefix) */}
         <p className="text-xs sm:text-sm text-content-muted font-medium">
-          Surah Range: <span className="text-content-primary font-semibold">{juzRange}</span>
+          <span className="text-content-primary font-semibold">{juzRange}</span>
         </p>
       </div>
 
-      {/* 1.3 SYNCHRONIZED PROGRESS BAR WITH SPEED ADJUSTMENTS */}
+      {/* 1.3 SYNCHRONIZED PROGRESS BAR */}
       <div className="mt-4 space-y-2">
         {/* Interactive Scrub Bar */}
         <div className="relative group">
@@ -269,7 +269,7 @@ export const JuzDisplay: React.FC = () => {
           />
         </div>
 
-        {/* Left and Right Timestamps with Percentage Completed */}
+        {/* Left and Right Timestamps with Percentage Completed in Middle (Speed pill removed) */}
         <div className="flex items-center justify-between text-xs text-content-muted font-mono px-1">
           {/* Elapsed Time */}
           <div className="flex flex-col items-start">
@@ -278,23 +278,18 @@ export const JuzDisplay: React.FC = () => {
             </span>
             {playbackSpeed !== 1.0 && (
               <span className="text-[10px] text-content-muted">
-                Live adjustment: {formatAudioTime(adjustedElapsedSeconds)}
+                Live: {formatAudioTime(adjustedElapsedSeconds)}
               </span>
             )}
           </div>
 
-          {/* Percentage Completed & Speed Indicator in Middle */}
-          <div className="flex items-center gap-2">
-            <span
-              className="text-[11px] font-bold text-brand-primary font-mono bg-brand-light px-2.5 py-0.5 rounded-full border border-brand-primary/20 shadow-sm"
-              title={`${progressPercent.toFixed(1)}% completed`}
-            >
-              {progressPercent.toFixed(1)}%
-            </span>
-            <div className="text-[11px] text-brand-primary font-sans font-medium bg-brand-light px-2.5 py-0.5 rounded-full border border-brand-primary/20">
-              {playbackSpeed}x Speed
-            </div>
-          </div>
+          {/* Percentage Completed in Middle */}
+          <span
+            className="text-[11px] font-bold text-brand-primary font-mono bg-brand-light px-2.5 py-0.5 rounded-full border border-brand-primary/20 shadow-sm"
+            title={`${progressPercent.toFixed(1)}% completed`}
+          >
+            {progressPercent.toFixed(1)}%
+          </span>
 
           {/* Remaining Time (adjusted with playback speed) */}
           <div className="flex flex-col items-end">
@@ -302,7 +297,7 @@ export const JuzDisplay: React.FC = () => {
               -{formatAudioTime(adjustedRemainingSeconds)}
             </span>
             <span className="text-[10px] text-content-muted">
-              {playbackSpeed !== 1.0 ? "Adjusted for speed" : "left"}
+              {playbackSpeed !== 1.0 ? "Adjusted" : "left"}
             </span>
           </div>
         </div>

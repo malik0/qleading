@@ -3,7 +3,7 @@
 import React, { useEffect, useRef } from "react";
 import { useApp } from "../context/AppContext";
 import { formatAudioTime } from "../lib/utils";
-import { Play, Volume2, ListChecks, Check } from "lucide-react";
+import { Play, Volume2, Check } from "lucide-react";
 
 export const JuzListTable: React.FC = () => {
   const {
@@ -31,18 +31,13 @@ export const JuzListTable: React.FC = () => {
   const progressPercentage = Math.round((completedCount / 30) * 100);
 
   return (
-    <section className="w-full bg-surface-card border border-surface-border rounded-3xl p-5 sm:p-7 backdrop-blur-xl shadow-xl space-y-4 transition-colors duration-200">
+    <section className="w-full bg-surface-card border border-surface-border rounded-2xl sm:rounded-3xl p-4 sm:p-7 backdrop-blur-xl shadow-xl space-y-4 transition-colors duration-200">
       <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2.5">
-          <div className="p-2.5 rounded-xl bg-brand-light text-brand-primary">
-            <ListChecks className="w-5 h-5" />
-          </div>
-          <div>
-            <h2 className="text-base font-bold text-content-primary">Juz Checklist</h2>
-            <p className="text-xs text-content-muted">
-              Tap any Juz to mark completed • Tap Play to listen
-            </p>
-          </div>
+        <div>
+          <h2 className="text-base font-bold text-content-primary">Juz Checklist</h2>
+          <p className="text-xs text-content-muted">
+            Tap any Juz to mark completed • Tap Play to listen
+          </p>
         </div>
 
         {/* Percentage indicator and progress bar */}

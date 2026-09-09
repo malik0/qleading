@@ -54,12 +54,16 @@ function createClearCookie(): string {
 function rowToUserState(row: any, user: { id: string; username: string; email: string }): UserState {
   let historyRecords = {};
   let userLogs = [];
+  let settings: any = {};
 
   try {
     historyRecords = JSON.parse(row?.history_records_json || "{}");
   } catch {}
   try {
     userLogs = JSON.parse(row?.user_logs_json || "[]");
+  } catch {}
+  try {
+    settings = JSON.parse(row?.settings_json || "{}");
   } catch {}
 
   return {
@@ -77,6 +81,9 @@ function rowToUserState(row: any, user: { id: string; username: string; email: s
     userLogs,
     activeDeviceId: row?.active_device_id || undefined,
     isPlaying: Boolean(row?.is_playing),
+    completedJuzs: settings.completedJuzs || [],
+    juzTally: settings.juzTally || 0,
+    khatmPlan: settings.khatmPlan || null,
   };
 }
 

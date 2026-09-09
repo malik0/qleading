@@ -14,6 +14,7 @@ import {
   AppSettings,
   DayReadingRecord,
   JuzInfo,
+  KhatmPlan,
   PlaybackSpeed,
   ThemeColor,
   ThemeMode,
@@ -33,6 +34,19 @@ import {
   getDeviceId,
 } from "../lib/storage";
 import { getLocalDateString, getSlotIndexForDate } from "../lib/utils";
+
+function isSameAudioUrl(src1?: string | null, src2?: string | null): boolean {
+  if (!src1 || !src2) return false;
+  if (src1 === src2) return true;
+  try {
+    const origin = typeof window !== "undefined" ? window.location.origin : "http://localhost";
+    const u1 = new URL(src1, origin);
+    const u2 = new URL(src2, origin);
+    return u1.href === u2.href;
+  } catch {
+    return src1 === src2;
+  }
+}
 
 interface AppContextType {
   // Juz info & lists
@@ -96,6 +110,13 @@ interface AppContextType {
   setCompletedStreakDaysManually: (daysCount: number) => void;
   toggleDayStreakManually: (dateStr: string) => void;
 
+  // Khatm Planner
+  khatmPlan: KhatmPlan | null;
+  saveKhatmPlan: (plan: KhatmPlan) => void;
+  toggleKhatmDayCompleted: (dayIndex: number) => void;
+  deleteKhatmPlan: () => void;
+  resetKhatmPlanProgress: () => void;
+
   // User Auth & Sync
   userState: UserState;
   loginUser: (email: string, password?: string) => Promise<{ success: boolean; error?: string }>;
@@ -133,6 +154,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [duration, setDuration] = useState(3300);
   const [playbackSpeed, setPlaybackSpeedState] = useState<PlaybackSpeed>(1.0);
   const [pendingJuzSwitch, setPendingJuzSwitch] = useState<number | null>(null);
+  const [failedLocalJuzs, setFailedLocalJuzs] = useState<Record<number, boolean>>({});
 
   // Sync state
   const [isSyncing, setIsSyncing] = useState(false);
@@ -233,9 +255,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
 
   // Determine active audio URL:
-  // Compressed audio files (~10MB) are stored directly with the app in public/audio/juz/
-  // and served by Cloudflare Workers. cdnAudioUrl is used as fallback.
-  const activeAudioUrl = currentJuz.localAudioUrl;
+  // Uses local WebM files if preferLocalAudio is enabled and file has not failed,
+  // otherwise uses CDN MP3 streaming URL.
+  const getAudioUrlForJuz = useCallback(
+    (juz: JuzInfo) => {
+      if (settings.preferLocalAudio && !failedLocalJuzs[juz.id]) {
+        return juz.localAudioUrl;
+      }
+      return juz.cdnAudioUrl;
+    },
+    [settings.preferLocalAudio, failedLocalJuzs]
+  );
+
+  const activeAudioUrl = getAudioUrlForJuz(currentJuz);
 
   // Update Settings
   const updateSettings = useCallback((partial: Partial<AppSettings>) => {
@@ -388,6 +420,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
           if (audioRef.current) {
             const targetJuz = INITIAL_JUZ_LIST.find((j) => j.id === data.juzId) || INITIAL_JUZ_LIST[0];
             audioRef.current.src = targetJuz.localAudioUrl;
+            const targetUrl = getAudioUrlForJuz(targetJuz);
+            if (!isSameAudioUrl(audioRef.current.src, targetUrl)) {
+              audioRef.current.src = targetUrl;
+            }
             audioRef.current.currentTime = data.position || 0;
           }
         }
@@ -407,7 +443,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => {
       channel.close();
     };
-  }, []);
+  }, [getAudioUrlForJuz]);
 
   // Unified Sync with Cloudflare D1
   const syncWithServer = useCallback(
@@ -445,12 +481,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
             if (targetJuzId !== currentState.currentJuzId) {
               const targetJuz = INITIAL_JUZ_LIST.find((j) => j.id === targetJuzId) || INITIAL_JUZ_LIST[0];
-              if (audioRef.current && audioRef.current.src !== targetJuz.localAudioUrl) {
-                audioRef.current.src = targetJuz.localAudioUrl;
+              const targetUrl = getAudioUrlForJuz(targetJuz);
+              if (audioRef.current && !isSameAudioUrl(audioRef.current.src, targetUrl)) {
+                audioRef.current.src = targetUrl;
               }
             }
 
-            if (audioRef.current && (!isPlayingRef.current || options?.isStartingPlayback)) {
+            if (audioRef.current && options?.isStartingPlayback) {
+              audioRef.current.currentTime = targetPos;
+            } else if (
+              audioRef.current &&
+              !isPlayingRef.current &&
+              Math.abs(audioRef.current.currentTime - targetPos) > 3
+            ) {
               audioRef.current.currentTime = targetPos;
             }
             setPlaybackPosition(targetPos);
@@ -464,7 +507,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setIsSyncing(false);
       }
     },
-    []
+    [getAudioUrlForJuz]
   );
 
   const manualSync = useCallback(async () => {
@@ -562,11 +605,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
           if (reconciled.currentJuzId !== userStateRef.current.currentJuzId) {
             const targetJuz = INITIAL_JUZ_LIST.find((j) => j.id === reconciled.currentJuzId) || INITIAL_JUZ_LIST[0];
-            if (audioRef.current && audioRef.current.src !== targetJuz.localAudioUrl) {
-              audioRef.current.src = targetJuz.localAudioUrl;
+            const targetUrl = getAudioUrlForJuz(targetJuz);
+            if (audioRef.current && !isSameAudioUrl(audioRef.current.src, targetUrl)) {
+              audioRef.current.src = targetUrl;
             }
           }
-          if (audioRef.current && !isPlayingRef.current) {
+          if (
+            audioRef.current &&
+            !isPlayingRef.current &&
+            Math.abs(audioRef.current.currentTime - (reconciled.playbackPositionSeconds || 0)) > 3
+          ) {
             audioRef.current.currentTime = reconciled.playbackPositionSeconds || 0;
           }
           setPlaybackPosition(reconciled.playbackPositionSeconds || 0);
@@ -586,11 +634,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
             if (reconciled.currentJuzId !== userStateRef.current.currentJuzId) {
               const targetJuz = INITIAL_JUZ_LIST.find((j) => j.id === reconciled.currentJuzId) || INITIAL_JUZ_LIST[0];
-              if (audioRef.current && audioRef.current.src !== targetJuz.localAudioUrl) {
-                audioRef.current.src = targetJuz.localAudioUrl;
+              const targetUrl = getAudioUrlForJuz(targetJuz);
+              if (audioRef.current && !isSameAudioUrl(audioRef.current.src, targetUrl)) {
+                audioRef.current.src = targetUrl;
               }
             }
-            if (audioRef.current) {
+            if (
+              audioRef.current &&
+              Math.abs(audioRef.current.currentTime - (reconciled.playbackPositionSeconds || 0)) > 3
+            ) {
               audioRef.current.currentTime = reconciled.playbackPositionSeconds || 0;
             }
             setPlaybackPosition(reconciled.playbackPositionSeconds || 0);
@@ -614,7 +666,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       clearInterval(interval);
       window.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [userState.isLoggedIn, userState.userId, isSyncing]);
+  }, [userState.isLoggedIn, userState.userId, isSyncing, getAudioUrlForJuz]);
 
   // Tab switch / page hide auto-sync
   useEffect(() => {
@@ -664,8 +716,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
             if (targetJuzId !== currentState.currentJuzId) {
               const targetJuz = INITIAL_JUZ_LIST.find((j) => j.id === targetJuzId) || INITIAL_JUZ_LIST[0];
-              if (audioRef.current.src !== targetJuz.localAudioUrl) {
-                audioRef.current.src = targetJuz.localAudioUrl;
+              const targetUrl = getAudioUrlForJuz(targetJuz);
+              if (audioRef.current && !isSameAudioUrl(audioRef.current.src, targetUrl)) {
+                audioRef.current.src = targetUrl;
               }
             }
 
@@ -691,35 +744,36 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       console.warn("Playback error:", e);
     }
-  }, [broadcastPlayback]);
+  }, [broadcastPlayback, getAudioUrlForJuz]);
 
   const pause = useCallback(() => {
     if (audioRef.current) {
+      const currentPos = audioRef.current.currentTime;
       audioRef.current.pause();
       setIsPlaying(false);
-      // Immediately sync state to server on pause
-      setTimeout(() => {
-        syncWithServer();
-      }, 50);
       isPlayingRef.current = false;
-      broadcastPlayback("PAUSE");
+      setPlaybackPosition(currentPos);
+      playbackPosRef.current = currentPos;
 
-      // Immediately sync pause state to server
-      if (userStateRef.current.isLoggedIn) {
-        fetch("/api/sync", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            state: userStateRef.current,
-            settings: settingsRef.current,
-            deviceId: getDeviceId(),
-            isPlaying: false,
-            action: "pause",
-          }),
-        }).catch(() => {});
+      // Update state and persist immediately so local storage and ref have exact current position
+      const updatedState: UserState = {
+        ...userStateRef.current,
+        playbackPositionSeconds: currentPos,
+        isPlaying: false,
+        updatedAt: new Date().toISOString(),
+      };
+      userStateRef.current = updatedState;
+      setUserState(updatedState);
+      saveStoredState(updatedState);
+
+      broadcastPlayback("PAUSE", { position: currentPos });
+
+      // Immediately sync pause state with the exact position to server
+      if (updatedState.isLoggedIn) {
+        syncWithServer(updatedState, { isPlaying: false, action: "pause" });
       }
     }
-  }, [syncWithServer, broadcastPlayback]);
+  }, [broadcastPlayback, syncWithServer]);
 
   const togglePlay = useCallback(() => {
     if (isPlaying) {
@@ -994,6 +1048,36 @@ export function AppProvider({ children }: { children: ReactNode }) {
         completedJuzIds: nextTodayCompletedJuzIds,
       };
 
+      // If active Khatm plan is running, check if completed Juz matches any day in the plan
+      let nextKhatm = s.khatmPlan || settingsRef.current.khatmPlan;
+      if (nextKhatm && !nextKhatm.isCompleted) {
+        const matchingDays: number[] = [];
+        for (let d = 0; d < nextKhatm.durationDays; d++) {
+          const fromOffset = Math.floor(d * nextKhatm.amountPerDay);
+          const toOffset = Math.max(fromOffset + 1, Math.floor((d + 1) * nextKhatm.amountPerDay));
+          for (let k = fromOffset; k < toOffset; k++) {
+            const jId = ((nextKhatm.startJuz - 1 + k) % 30) + 1;
+            if (jId === completedJuzId) {
+              matchingDays.push(d);
+            }
+          }
+        }
+        if (matchingDays.length > 0) {
+          const currentDays = nextKhatm.completedDays || [];
+          const combinedDays = Array.from(new Set([...currentDays, ...matchingDays])).sort((a, b) => a - b);
+          nextKhatm = {
+            ...nextKhatm,
+            completedDays: combinedDays,
+            isCompleted: combinedDays.length >= nextKhatm.durationDays,
+            updatedAt: new Date().toISOString(),
+          };
+          saveStoredSettings({
+            ...settingsRef.current,
+            khatmPlan: nextKhatm,
+          });
+        }
+      }
+
       return {
         ...s,
         timerSeconds: resetTimerSec,
@@ -1001,6 +1085,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         juzTally: nextTally,
         historyRecords: history,
         userLogs: [logEntry, ...(s.userLogs || [])].slice(0, 500),
+        khatmPlan: nextKhatm,
       };
     });
 
@@ -1155,6 +1240,88 @@ export function AppProvider({ children }: { children: ReactNode }) {
     },
     [updateStateAndPersist, syncWithServer]
   );
+
+  // Khatm Planner Helpers
+  const saveKhatmPlan = useCallback(
+    (plan: KhatmPlan) => {
+      const updatedPlan: KhatmPlan = {
+        ...plan,
+        updatedAt: new Date().toISOString(),
+      };
+      updateSettings({ khatmPlan: updatedPlan });
+      updateStateAndPersist((s) => ({
+        ...s,
+        khatmPlan: updatedPlan,
+      }));
+      syncWithServer();
+    },
+    [updateSettings, updateStateAndPersist, syncWithServer]
+  );
+
+  const toggleKhatmDayCompleted = useCallback(
+    (dayIndex: number) => {
+      updateStateAndPersist((s) => {
+        const plan = s.khatmPlan || settingsRef.current.khatmPlan;
+        if (!plan) return s;
+        const currentCompleted = plan.completedDays || [];
+        const isCompleted = currentCompleted.includes(dayIndex);
+        const nextCompleted = isCompleted
+          ? currentCompleted.filter((i) => i !== dayIndex)
+          : [...currentCompleted, dayIndex].sort((a, b) => a - b);
+
+        const isAllFinished = nextCompleted.length >= plan.durationDays;
+        const updatedPlan: KhatmPlan = {
+          ...plan,
+          completedDays: nextCompleted,
+          isCompleted: isAllFinished,
+          updatedAt: new Date().toISOString(),
+        };
+
+        saveStoredSettings({
+          ...settingsRef.current,
+          khatmPlan: updatedPlan,
+        });
+
+        return {
+          ...s,
+          khatmPlan: updatedPlan,
+        };
+      });
+      syncWithServer();
+    },
+    [updateStateAndPersist, syncWithServer]
+  );
+
+  const deleteKhatmPlan = useCallback(() => {
+    updateSettings({ khatmPlan: null });
+    updateStateAndPersist((s) => ({
+      ...s,
+      khatmPlan: null,
+    }));
+    syncWithServer();
+  }, [updateSettings, updateStateAndPersist, syncWithServer]);
+
+  const resetKhatmPlanProgress = useCallback(() => {
+    updateStateAndPersist((s) => {
+      const plan = s.khatmPlan || settingsRef.current.khatmPlan;
+      if (!plan) return s;
+      const updatedPlan: KhatmPlan = {
+        ...plan,
+        completedDays: [],
+        isCompleted: false,
+        updatedAt: new Date().toISOString(),
+      };
+      saveStoredSettings({
+        ...settingsRef.current,
+        khatmPlan: updatedPlan,
+      });
+      return {
+        ...s,
+        khatmPlan: updatedPlan,
+      };
+    });
+    syncWithServer();
+  }, [updateStateAndPersist, syncWithServer]);
 
   // MediaSession API Integration (Lock Screen, Notification, Headphone buttons)
   useEffect(() => {
@@ -1405,6 +1572,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setJuzTallyManually,
         setCompletedStreakDaysManually,
         toggleDayStreakManually,
+        khatmPlan: userState.khatmPlan || settings.khatmPlan || null,
+        saveKhatmPlan,
+        toggleKhatmDayCompleted,
+        deleteKhatmPlan,
+        resetKhatmPlanProgress,
         userState,
         loginUser,
         registerUser,
@@ -1425,6 +1597,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         onTimeUpdate={(e) => {
           const ct = e.currentTarget.currentTime;
           setPlaybackPosition(ct);
+          playbackPosRef.current = ct;
         }}
         onLoadedMetadata={(e) => {
           const d = e.currentTarget.duration;
@@ -1434,20 +1607,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
           if (playbackSpeed) {
             e.currentTarget.playbackRate = playbackSpeed;
           }
-          // Restore position if loading fresh
-          if (playbackPosition > 0 && Math.abs(e.currentTarget.currentTime - playbackPosition) > 2) {
-            e.currentTarget.currentTime = playbackPosition;
+          // Restore position if loading fresh or transitioning source
+          const targetPos = playbackPosRef.current || playbackPosition || userStateRef.current.playbackPositionSeconds || 0;
+          if (targetPos > 0 && Math.abs(e.currentTarget.currentTime - targetPos) > 1) {
+            e.currentTarget.currentTime = targetPos;
           }
         }}
         onEnded={handleAudioEnded}
         onError={(e) => {
           console.warn("Audio source load error, falling back to CDN stream:", e);
-          if (audioRef.current && audioRef.current.src !== currentJuz.cdnAudioUrl) {
-            audioRef.current.src = currentJuz.cdnAudioUrl;
-            audioRef.current.load();
-            if (isPlaying) {
-              audioRef.current.play().catch(() => {});
-            }
+          if (settings.preferLocalAudio && !failedLocalJuzs[currentJuz.id]) {
+            setFailedLocalJuzs((prev) => ({ ...prev, [currentJuz.id]: true }));
           }
         }}
       />

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useApp } from "../context/AppContext";
-import { BarChart3, Clock3, Info, Focus, ChevronLeft, ChevronRight } from "lucide-react";
+import { Clock3, Info, Focus, ChevronLeft, ChevronRight } from "lucide-react";
 import { formatAudioTime, getLocalDateString } from "../lib/utils";
 
 export const ReadingChart: React.FC = () => {
@@ -147,73 +147,68 @@ export const ReadingChart: React.FC = () => {
   const totalMinutesForDay = Math.round((activeDayRecord.secondsRead || 0) / 60);
 
   return (
-    <div className="w-full bg-surface-card border border-surface-border rounded-3xl p-5 sm:p-6 backdrop-blur-xl shadow-xl space-y-4 transition-colors duration-200">
+    <div className="w-full bg-surface-card border border-surface-border rounded-2xl sm:rounded-3xl p-4 sm:p-6 backdrop-blur-xl shadow-xl space-y-4 transition-colors duration-200">
       {/* Chart Title, Day Navigation & Summary */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2.5">
-          <div className="p-2.5 rounded-xl bg-brand-light text-brand-primary">
-            <BarChart3 className="w-5 h-5" />
+        <div>
+          <div className="flex items-center gap-2">
+            <h2 className="text-base font-bold text-content-primary">24-Hour Reading Timeline</h2>
+            {isSelectedDayToday && currentHour !== null && (
+              <button
+                type="button"
+                onClick={() => scrollToCurrentHour("smooth")}
+                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-[11px] font-semibold text-brand-primary bg-brand-light hover:bg-brand-light/70 border border-brand-primary/20 transition-all shadow-sm active:scale-95 cursor-pointer"
+                title="Center focus current hour"
+              >
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-primary opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-brand-primary" />
+                </span>
+                <span>Now: {String(currentHour).padStart(2, "0")}:00</span>
+                <Focus className="w-3 h-3 opacity-80" />
+              </button>
+            )}
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-base font-bold text-content-primary">24-Hour Reading Timeline</h2>
-              {isSelectedDayToday && currentHour !== null && (
-                <button
-                  type="button"
-                  onClick={() => scrollToCurrentHour("smooth")}
-                  className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-[11px] font-semibold text-brand-primary bg-brand-light hover:bg-brand-light/70 border border-brand-primary/20 transition-all shadow-sm active:scale-95 cursor-pointer"
-                  title="Center focus current hour"
-                >
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-primary opacity-75" />
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-brand-primary" />
-                  </span>
-                  <span>Now: {String(currentHour).padStart(2, "0")}:00</span>
-                  <Focus className="w-3 h-3 opacity-80" />
-                </button>
-              )}
-            </div>
 
-            {/* Requirement 5: Day Navigation Controls (Back & Forward across days) */}
-            <div className="flex items-center gap-1.5 mt-1.5">
+          {/* Requirement 5: Day Navigation Controls (Back & Forward across days) */}
+          <div className="flex items-center gap-1.5 mt-1.5">
+            <button
+              type="button"
+              onClick={() => setSelectedDayOffset((prev) => prev + 1)}
+              title="View Previous Day"
+              className="p-1 rounded-lg bg-surface-subtle hover:bg-surface-hover text-content-secondary hover:text-content-primary border border-surface-border transition shadow-sm cursor-pointer active:scale-95 flex items-center justify-center"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+
+            <span className="text-xs font-semibold text-content-primary font-mono px-2 py-0.5 rounded-lg bg-surface-subtle border border-surface-border select-none">
+              {formattedDayLabel}
+            </span>
+
+            <button
+              type="button"
+              onClick={() => setSelectedDayOffset((prev) => Math.max(0, prev - 1))}
+              disabled={isSelectedDayToday}
+              title={isSelectedDayToday ? "Today is the latest date" : "View Next Day"}
+              className={`p-1 rounded-lg border transition shadow-sm flex items-center justify-center ${
+                isSelectedDayToday
+                  ? "bg-surface-subtle/40 border-surface-border/50 text-content-muted/40 cursor-not-allowed"
+                  : "bg-surface-subtle hover:bg-surface-hover text-content-secondary hover:text-content-primary border border-surface-border cursor-pointer active:scale-95"
+              }`}
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+
+            {!isSelectedDayToday && (
               <button
                 type="button"
-                onClick={() => setSelectedDayOffset((prev) => prev + 1)}
-                title="View Previous Day"
-                className="p-1 rounded-lg bg-surface-subtle hover:bg-surface-hover text-content-secondary hover:text-content-primary border border-surface-border transition shadow-sm cursor-pointer active:scale-95 flex items-center justify-center"
+                onClick={() => setSelectedDayOffset(0)}
+                className="px-2 py-0.5 rounded-lg text-[10px] font-bold text-brand-primary bg-brand-light hover:bg-brand-light/70 border border-brand-primary/20 transition cursor-pointer"
+                title="Jump back to Today"
               >
-                <ChevronLeft className="w-4 h-4" />
+                Today
               </button>
-
-              <span className="text-xs font-semibold text-content-primary font-mono px-2 py-0.5 rounded-lg bg-surface-subtle border border-surface-border select-none">
-                {formattedDayLabel}
-              </span>
-
-              <button
-                type="button"
-                onClick={() => setSelectedDayOffset((prev) => Math.max(0, prev - 1))}
-                disabled={isSelectedDayToday}
-                title={isSelectedDayToday ? "Today is the latest date" : "View Next Day"}
-                className={`p-1 rounded-lg border transition shadow-sm flex items-center justify-center ${
-                  isSelectedDayToday
-                    ? "bg-surface-subtle/40 border-surface-border/50 text-content-muted/40 cursor-not-allowed"
-                    : "bg-surface-subtle hover:bg-surface-hover text-content-secondary hover:text-content-primary border border-surface-border cursor-pointer active:scale-95"
-                }`}
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-
-              {!isSelectedDayToday && (
-                <button
-                  type="button"
-                  onClick={() => setSelectedDayOffset(0)}
-                  className="px-2 py-0.5 rounded-lg text-[10px] font-bold text-brand-primary bg-brand-light hover:bg-brand-light/70 border border-brand-primary/20 transition cursor-pointer"
-                  title="Jump back to Today"
-                >
-                  Today
-                </button>
-              )}
-            </div>
+            )}
           </div>
         </div>
 
@@ -230,23 +225,23 @@ export const ReadingChart: React.FC = () => {
       {/* Hover Info Tooltip Banner */}
       <div className="min-h-[28px] flex items-center justify-between text-xs px-3 py-1.5 rounded-xl bg-surface-subtle border border-surface-border text-content-secondary">
         <div className="flex items-center gap-1.5">
-          <Clock3 className="w-3.5 h-3.5 text-brand-primary" />
+          <Clock3 className="w-3.5 h-3.5 text-brand-primary shrink-0" />
           {hoveredSlot ? (
-            <span className="flex items-center gap-1.5">
-              <span>Time window:</span>
+            <span className="flex items-center gap-1.5 truncate">
+              <span>Time:</span>
               <strong className="text-content-primary">{hoveredSlot.timeLabel}</strong>
               {hoveredSlot.isNow && (
-                <span className="text-[10px] px-1.5 py-0.2 rounded bg-brand-primary text-white font-semibold uppercase tracking-wider">
+                <span className="text-[10px] px-1.5 py-0.2 rounded bg-brand-primary text-white font-semibold uppercase tracking-wider shrink-0">
                   Current
                 </span>
               )}
             </span>
           ) : (
-            <span className="text-content-muted">Hover or tap on any 15-minute slot below</span>
+            <span className="text-content-muted truncate">Hover or tap on any 15-minute slot below</span>
           )}
         </div>
         {hoveredSlot && (
-          <span className="font-mono text-brand-primary font-semibold">
+          <span className="font-mono text-brand-primary font-semibold shrink-0 ml-2">
             {Math.floor(hoveredSlot.seconds / 60)}m {hoveredSlot.seconds % 60}s read
           </span>
         )}
@@ -364,7 +359,7 @@ export const ReadingChart: React.FC = () => {
       {/* Legend & Note */}
       <div className="pt-2 border-t border-surface-border flex flex-wrap items-center justify-between gap-2 text-[11px] text-content-muted">
         <div className="flex items-center gap-1.5">
-          <Info className="w-3.5 h-3.5 text-content-muted" />
+          <Info className="w-3.5 h-3.5 text-content-muted shrink-0" />
           <span>Timer tracks duration actively as Quran audio plays</span>
         </div>
         <div className="flex items-center gap-2">

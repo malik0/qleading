@@ -41,6 +41,20 @@ export interface AppSettings {
   defaultPlaybackSpeed?: PlaybackSpeed;
   customJuzNames: Record<number, string>;
   customJuzRanges: Record<number, string>;
+  khatmPlan?: KhatmPlan | null;
+}
+
+export interface KhatmPlan {
+  id: string;
+  title?: string;
+  startDate: string; // YYYY-MM-DD
+  startJuz: number; // 1 to 30
+  durationDays: number; // e.g. 30
+  amountPerDay: number; // e.g. 1 (Juzes per day)
+  completedDays: number[]; // 0-indexed day offsets: 0 .. (durationDays - 1)
+  isCompleted?: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface DayReadingRecord {
@@ -82,6 +96,7 @@ export interface UserState {
   isPlaying?: boolean; // Whether audio is actively playing on this account
   completedJuzs?: number[]; // List of completed Juz IDs (1-30)
   juzTally?: number; // Total completed Juz count
+  khatmPlan?: KhatmPlan | null;
 }
 
 export interface SyncPayload {

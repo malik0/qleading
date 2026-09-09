@@ -215,37 +215,37 @@ export const UserAuthModal: React.FC<UserAuthModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-fadeIn">
-      <div className="bg-surface-card border border-surface-border rounded-3xl max-w-xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden transition-colors duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-black/75 backdrop-blur-md animate-fadeIn">
+      <div className="bg-surface-card border border-surface-border rounded-2xl sm:rounded-3xl max-w-xl w-full max-h-[92dvh] sm:max-h-[90vh] flex flex-col shadow-2xl overflow-hidden transition-colors duration-200">
         
         {/* Modal Header */}
-        <div className="flex items-center justify-between p-6 border-b border-surface-border">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2.5 rounded-xl bg-brand-light text-brand-primary">
+        <div className="flex items-center justify-between p-4 sm:p-6 border-b border-surface-border shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0 pr-2">
+            <div className="p-2 sm:p-2.5 rounded-xl bg-brand-light text-brand-primary shrink-0">
               <User className="w-5 h-5" />
             </div>
-            <div>
-              <h3 className="text-lg font-bold text-content-primary">
+            <div className="min-w-0">
+              <h3 className="text-base sm:text-lg font-bold text-content-primary truncate sm:whitespace-normal">
                 {userState.isLoggedIn ? "Account & Cloudflare Sync" : "Sign In to Qleading"}
               </h3>
-              <p className="text-xs text-content-muted">
+              <p className="text-xs text-content-muted line-clamp-1 sm:line-clamp-none">
                 Multi-device position sync powered by Cloudflare D1
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-xl bg-surface-subtle hover:bg-surface-hover text-content-muted hover:text-content-primary transition"
+            className="p-1.5 sm:p-2 rounded-xl bg-surface-subtle hover:bg-surface-hover text-content-muted hover:text-content-primary transition shrink-0"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Tab Switcher */}
-        <div className="flex border-b border-surface-border px-6 bg-surface-subtle/50">
+        <div className="flex border-b border-surface-border px-4 sm:px-6 bg-surface-subtle/50 shrink-0">
           <button
             onClick={() => setActiveTab("auth")}
-            className={`py-3 px-4 text-sm font-semibold border-b-2 transition ${
+            className={`py-2.5 sm:py-3 px-3 sm:px-4 text-xs sm:text-sm font-semibold border-b-2 transition ${
               activeTab === "auth"
                 ? "border-brand-primary text-brand-primary"
                 : "border-transparent text-content-muted hover:text-content-primary"
@@ -255,7 +255,7 @@ export const UserAuthModal: React.FC<UserAuthModalProps> = ({
           </button>
           <button
             onClick={() => setActiveTab("logs")}
-            className={`py-3 px-4 text-sm font-semibold border-b-2 transition flex items-center gap-1.5 ${
+            className={`py-2.5 sm:py-3 px-3 sm:px-4 text-xs sm:text-sm font-semibold border-b-2 transition flex items-center gap-1.5 ${
               activeTab === "logs"
                 ? "border-brand-primary text-brand-primary"
                 : "border-transparent text-content-muted hover:text-content-primary"
@@ -268,20 +268,20 @@ export const UserAuthModal: React.FC<UserAuthModalProps> = ({
 
         {/* Feedback Alerts */}
         {errorMessage && (
-          <div className="mx-6 mt-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-500 text-xs flex items-center gap-2">
+          <div className="mx-4 sm:mx-6 mt-3 sm:mt-4 p-2.5 sm:p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-500 text-xs flex items-center gap-2 shrink-0">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{errorMessage}</span>
           </div>
         )}
         {successMessage && (
-          <div className="mx-6 mt-4 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-500 text-xs flex items-center gap-2">
+          <div className="mx-4 sm:mx-6 mt-3 sm:mt-4 p-2.5 sm:p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-500 text-xs flex items-center gap-2 shrink-0">
             <CheckCircle2 className="w-4 h-4 shrink-0" />
             <span>{successMessage}</span>
           </div>
         )}
 
         {/* Content Body */}
-        <div className="p-6 overflow-y-auto space-y-6 flex-1">
+        <div className="p-4 sm:p-6 overflow-y-auto space-y-5 sm:space-y-6 flex-1 min-h-0">
           {activeTab === "auth" ? (
             userState.isLoggedIn ? (
               /* LOGGED IN VIEW */

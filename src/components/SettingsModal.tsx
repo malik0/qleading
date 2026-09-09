@@ -324,35 +324,35 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     COLOR_OPTIONS.find((t) => t.id === themeColor) || COLOR_OPTIONS[0];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-fadeIn">
-      <div className="bg-surface-card border border-surface-border rounded-3xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden transition-colors duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-black/75 backdrop-blur-md animate-fadeIn">
+      <div className="bg-surface-card border border-surface-border rounded-2xl sm:rounded-3xl max-w-2xl w-full max-h-[92dvh] sm:max-h-[90vh] flex flex-col shadow-2xl overflow-hidden transition-colors duration-200">
         {/* Modal Header */}
-        <div className="flex items-center justify-between p-5 sm:p-6 border-b border-surface-border">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2.5 rounded-xl bg-brand-light text-brand-primary">
+        <div className="flex items-center justify-between p-4 sm:p-6 border-b border-surface-border shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0 pr-2">
+            <div className="p-2 sm:p-2.5 rounded-xl bg-brand-light text-brand-primary shrink-0">
               <Sliders className="w-5 h-5" />
             </div>
-            <div>
-              <h3 className="text-lg font-bold text-content-primary">App Settings</h3>
-              <p className="text-xs text-content-muted">
+            <div className="min-w-0">
+              <h3 className="text-base sm:text-lg font-bold text-content-primary truncate sm:whitespace-normal">App Settings</h3>
+              <p className="text-xs text-content-muted line-clamp-1 sm:line-clamp-none">
                 Choose color themes, adjust display mode, audio jump steps, and Juz labels
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-xl bg-surface-subtle hover:bg-surface-hover text-content-muted hover:text-content-primary transition"
+            className="p-1.5 sm:p-2 rounded-xl bg-surface-subtle hover:bg-surface-hover text-content-muted hover:text-content-primary transition shrink-0"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Tab Switcher */}
-        <div className="border-b border-surface-border px-4 sm:px-6 py-3 bg-surface-subtle/40 overflow-x-auto">
+        <div className="border-b border-surface-border px-3 sm:px-6 py-2.5 sm:py-3 bg-surface-subtle/40 overflow-x-auto shrink-0 scrollbar-none">
           <div className="flex items-center gap-2 sm:gap-2.5 min-w-max">
             <button
               onClick={() => setActiveTab("themes")}
-              className={`py-2 px-3.5 sm:px-4 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 whitespace-nowrap ${
+              className={`py-1.5 sm:py-2 px-3 sm:px-4 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0 ${
                 activeTab === "themes"
                   ? "bg-brand-primary text-white shadow-sm font-bold"
                   : "bg-surface-card hover:bg-surface-hover text-content-secondary hover:text-content-primary border border-surface-border"
@@ -363,7 +363,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </button>
             <button
               onClick={() => setActiveTab("general")}
-              className={`py-2 px-3.5 sm:px-4 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap ${
+              className={`py-1.5 sm:py-2 px-3 sm:px-4 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap shrink-0 ${
                 activeTab === "general"
                   ? "bg-brand-primary text-white shadow-sm font-bold"
                   : "bg-surface-card hover:bg-surface-hover text-content-secondary hover:text-content-primary border border-surface-border"
@@ -373,7 +373,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </button>
             <button
               onClick={() => setActiveTab("progress")}
-              className={`py-2 px-3.5 sm:px-4 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 whitespace-nowrap ${
+              className={`py-1.5 sm:py-2 px-3 sm:px-4 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0 ${
                 activeTab === "progress"
                   ? "bg-brand-primary text-white shadow-sm font-bold"
                   : "bg-surface-card hover:bg-surface-hover text-content-secondary hover:text-content-primary border border-surface-border"
@@ -387,7 +387,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 setActiveTab("juz");
                 handleSelectJuzToEdit(selectedJuzEdit);
               }}
-              className={`py-2 px-3.5 sm:px-4 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap ${
+              className={`py-1.5 sm:py-2 px-3 sm:px-4 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap shrink-0 ${
                 activeTab === "juz"
                   ? "bg-brand-primary text-white shadow-sm font-bold"
                   : "bg-surface-card hover:bg-surface-hover text-content-secondary hover:text-content-primary border border-surface-border"
@@ -397,7 +397,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </button>
             <button
               onClick={() => setActiveTab("media")}
-              className={`py-2 px-3.5 sm:px-4 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 whitespace-nowrap ${
+              className={`py-1.5 sm:py-2 px-3 sm:px-4 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0 ${
                 activeTab === "media"
                   ? "bg-brand-primary text-white shadow-sm font-bold"
                   : "bg-surface-card hover:bg-surface-hover text-content-secondary hover:text-content-primary border border-surface-border"
@@ -410,7 +410,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         </div>
 
         {/* Content Body */}
-        <div className="p-4 sm:p-6 overflow-y-auto space-y-6 flex-1">
+        <div className="p-3.5 sm:p-6 overflow-y-auto space-y-5 sm:space-y-6 flex-1 min-h-0">
           {/* TAB 1: COLOR THEMES GALLERY */}
           {activeTab === "themes" && (
             <div className="space-y-6">

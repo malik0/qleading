@@ -237,36 +237,31 @@ export const StreakCounter: React.FC = () => {
   ]);
 
   return (
-    <div className="w-full bg-surface-card border border-surface-border rounded-3xl p-5 sm:p-6 backdrop-blur-xl shadow-xl space-y-4 transition-colors duration-200">
-      {/* Top Bar: Title & Stats */}
+    <div className="w-full bg-surface-card border border-surface-border rounded-2xl sm:rounded-3xl p-4 sm:p-6 backdrop-blur-xl shadow-xl space-y-4 transition-colors duration-200">
+      {/* Top Bar: Title & Stats without daily streak icon */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <div className="p-2.5 rounded-xl bg-brand-light text-brand-primary">
-            <Flame className="w-5 h-5 fill-current" />
-          </div>
-          <div>
-            <h2 className="text-base font-bold text-content-primary">Daily Streak</h2>
-            <button
-              onClick={() => {
-                setTempTargetMinutes(streakTargetMinutes);
-                setShowTargetModal(true);
-              }}
-              title="Click to adjust daily streak target"
-              className="group flex items-center gap-1.5 text-xs text-content-muted hover:text-brand-primary transition cursor-pointer mt-0.5"
-            >
-              <span>Target: {streakTargetMinutes} min daily</span>
-              <Pencil className="w-3 h-3 text-brand-primary opacity-60 group-hover:opacity-100 transition-opacity" />
-            </button>
-          </div>
+        <div>
+          <h2 className="text-base font-bold text-content-primary">Daily Streak</h2>
+          <button
+            onClick={() => {
+              setTempTargetMinutes(streakTargetMinutes);
+              setShowTargetModal(true);
+            }}
+            title="Click to adjust daily streak target"
+            className="group flex items-center gap-1.5 text-xs text-content-muted hover:text-brand-primary transition cursor-pointer mt-0.5"
+          >
+            <span>Target: {streakTargetMinutes} min daily</span>
+            <Pencil className="w-3 h-3 text-brand-primary opacity-60 group-hover:opacity-100 transition-opacity" />
+          </button>
         </div>
 
         {/* 4.4 30-Day Quick Stats */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 sm:gap-3">
           <div className="text-right">
-            <span className="text-xs text-content-muted block font-medium">
+            <span className="text-[11px] sm:text-xs text-content-muted block font-medium">
               Past 30 Days
             </span>
-            <span className="text-sm font-bold text-brand-primary font-mono">
+            <span className="text-xs sm:text-sm font-bold text-brand-primary font-mono">
               {stats30Days.completedCount}/30 ({stats30Days.percent}%)
             </span>
           </div>
@@ -334,7 +329,7 @@ export const StreakCounter: React.FC = () => {
                 title={tooltip}
               >
                 {/* 4.1 Day Circle with Progress Bar Border */}
-                <div className="relative w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center select-none">
+                <div className="relative w-9 h-9 sm:w-12 sm:h-12 flex items-center justify-center select-none">
                   {/* SVG Circular Border Progress Bar */}
                   <svg
                     className="absolute inset-0 w-full h-full -rotate-90 pointer-events-none"
@@ -375,7 +370,7 @@ export const StreakCounter: React.FC = () => {
 
                   {/* Date Initial (M, T, W, T, F, S, S) */}
                   <div
-                    className={`w-7 h-7 sm:w-8.5 sm:h-8.5 rounded-full flex items-center justify-center text-xs sm:text-sm font-bold transition-all z-10 ${innerBadgeStyle}`}
+                    className={`w-6.5 h-6.5 sm:w-8.5 sm:h-8.5 rounded-full flex items-center justify-center text-xs sm:text-sm font-bold transition-all z-10 ${innerBadgeStyle}`}
                   >
                     {item.dayLetter}
                   </div>
@@ -402,7 +397,7 @@ export const StreakCounter: React.FC = () => {
                 ) : null}
 
                 {/* Date number */}
-                <span className="text-[11px] font-mono text-content-muted">
+                <span className="text-[10px] sm:text-[11px] font-mono text-content-muted">
                   {item.dayNum}
                 </span>
               </button>
@@ -415,17 +410,17 @@ export const StreakCounter: React.FC = () => {
       {showMonthlyCalendar && mounted && createPortal(
         <div
           onClick={() => setShowMonthlyCalendar(false)}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fadeIn"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-sm animate-fadeIn"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-surface-card border border-surface-border rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto"
+            className="bg-surface-card border border-surface-border rounded-2xl sm:rounded-3xl max-w-md w-full p-4 sm:p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto"
           >
             {/* Header with Month Navigation */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Trophy className="w-5 h-5 text-brand-primary" />
-                <h3 className="text-lg font-bold text-content-primary">
+                <Trophy className="w-5 h-5 text-brand-primary shrink-0" />
+                <h3 className="text-base sm:text-lg font-bold text-content-primary">
                   {calendarDays.monthLabel}
                 </h3>
               </div>
@@ -464,10 +459,10 @@ export const StreakCounter: React.FC = () => {
             </div>
 
             {/* Calendar Grid with Theme & Gray Circles */}
-            <div className="grid grid-cols-7 gap-1.5">
+            <div className="grid grid-cols-7 gap-1 sm:gap-1.5">
               {calendarDays.days.map((dayItem, index) => {
                 if (!dayItem) {
-                  return <div key={`empty-${index}`} className="h-11" />;
+                  return <div key={`empty-${index}`} className="h-10 sm:h-11" />;
                 }
 
                 let colorStyle = "bg-surface-subtle/50 border-surface-border text-content-muted/60";
@@ -507,7 +502,7 @@ export const StreakCounter: React.FC = () => {
                         ? "Not Completed"
                         : "Upcoming / Today"
                     } • Click for stats`}
-                    className={`h-11 rounded-2xl flex flex-col items-center justify-center border text-xs font-medium cursor-pointer transition-all hover:scale-105 active:scale-95 ${colorStyle}`}
+                    className={`h-10 sm:h-11 rounded-xl sm:rounded-2xl flex flex-col items-center justify-center border text-xs font-medium cursor-pointer transition-all hover:scale-105 active:scale-95 ${colorStyle}`}
                   >
                     <span className="leading-tight">{dayItem.day}</span>
                     {/* Multi-Juz dots in calendar */}
@@ -561,11 +556,11 @@ export const StreakCounter: React.FC = () => {
       {selectedDayStats && mounted && createPortal(
         <div
           onClick={() => setSelectedDayStats(null)}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fadeIn"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-sm animate-fadeIn"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-surface-card border border-surface-border rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto"
+            className="bg-surface-card border border-surface-border rounded-2xl sm:rounded-3xl max-w-sm w-full p-4 sm:p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto"
           >
             <div className="flex items-center justify-between border-b border-surface-border pb-3">
               <div className="flex items-center gap-2">
@@ -678,19 +673,19 @@ export const StreakCounter: React.FC = () => {
       {showTargetModal && mounted && createPortal(
         <div
           onClick={() => setShowTargetModal(false)}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fadeIn"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-sm animate-fadeIn"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-surface-card border border-surface-border rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-5"
+            className="bg-surface-card border border-surface-border rounded-2xl sm:rounded-3xl max-w-sm w-full p-4 sm:p-6 shadow-2xl space-y-4 sm:space-y-5"
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <div className="p-2.5 rounded-xl bg-brand-light text-brand-primary">
-                  <Flame className="w-5 h-5 fill-current" />
+                <div className="p-2 sm:p-2.5 rounded-xl bg-brand-light text-brand-primary shrink-0">
+                  <Flame className="w-4 h-4 sm:w-5 sm:h-5 fill-current" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-content-primary">
+                  <h3 className="text-sm sm:text-base font-bold text-content-primary">
                     Daily Streak Target
                   </h3>
                   <p className="text-xs text-content-muted">

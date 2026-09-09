@@ -4,6 +4,7 @@ const sharp = require('sharp');
 
 // Master Vector Icon Definition (512x512)
 // Features the colorful letter "Q" with sacred Holy Quran & continuous recitation audio crown
+// Master Vector Icon Definition (512x512) - New Brand: Cursive 'q' on Warm Sepia/Mustard Squircle
 const masterSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <defs>
     <!-- Deep Cosmic Obsidian Dark Background -->
@@ -11,6 +12,10 @@ const masterSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"
       <stop offset="0%" stop-color="#0a1024" />
       <stop offset="50%" stop-color="#030712" />
       <stop offset="100%" stop-color="#0d152c" />
+    <linearGradient id="mustardSepiaBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F3E5AB" />
+      <stop offset="50%" stop-color="#EAD896" />
+      <stop offset="100%" stop-color="#DFCA7E" />
     </linearGradient>
 
     <!-- Spectrum Gradient for Q: Sacred Emerald -> Radiant Cyan -> Azure Blue -> Violet -> Rose Fuchsia -> Sunset Amber -> Gold -->
@@ -80,6 +85,8 @@ const masterSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"
   <rect width="512" height="512" rx="116" fill="url(#bgGrad)" />
   <rect width="512" height="512" rx="116" fill="url(#centerGlow)" />
   <rect x="6" y="6" width="500" height="500" rx="112" stroke="url(#rimGrad)" stroke-width="2.5" fill="none" opacity="0.5" />
+  <rect width="512" height="512" rx="120" fill="url(#mustardSepiaBg)" />
+  <rect x="6" y="6" width="500" height="500" rx="114" stroke="#CBB566" stroke-width="5" fill="none" opacity="0.5" />
 
   <!-- Subtle Islamic Geometric Watermark -->
   <g transform="translate(242, 230)" opacity="0.055" stroke="#ffffff" stroke-width="2" fill="none">
@@ -94,6 +101,7 @@ const masterSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"
     <!-- THE UNIFIED 'Q' BODY: Perfectly proportioned (Center 242, 230) -->
     <!-- Outer Radius R=164, Inner Radius r=108, Thickness=56px -->
     <!-- Sweeps seamlessly into the bottom-right tail flourish -->
+  <g stroke="#121212" stroke-width="32" stroke-linecap="round" stroke-linejoin="round" fill="none">
     <path d="
       M 242 66
       C 151 66, 78 139, 78 230
@@ -114,6 +122,13 @@ const masterSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"
     " fill="url(#qSpectrum)" fill-rule="evenodd" filter="url(#qGlowMaster)" />
 
     <!-- Luminous 3D Accent Ribbon along the Tail -->
+      M 152 232
+      C 168 184, 206 142, 252 142
+      C 275 142, 288 156, 288 180
+      L 288 396
+      C 288 424, 314 430, 336 408
+      C 356 388, 370 350, 374 324
+    " />
     <path d="
       M 355 346
       C 384 376, 424 416, 460 424
@@ -185,6 +200,12 @@ const masterSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"
         M 60 40 L 28 56 L 6 48
       " stroke="url(#goldGrad)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" />
     </g>
+      M 288 210
+      C 276 170, 242 144, 198 144
+      C 148 144, 114 186, 114 238
+      C 114 288, 148 326, 198 326
+      C 242 326, 276 296, 288 250
+    " />
   </g>
 </svg>`;
 
