@@ -41,11 +41,25 @@ function mergeHistoryRecords(
         combinedSlots[sNum] = Math.max(combinedSlots[sNum] || 0, locDay.slots[sNum] || 0);
       }
 
+      const combinedCompletedJuzIds = Array.from(
+        new Set([
+          ...(locDay.completedJuzIds || []),
+          ...(remDay.completedJuzIds || []),
+        ])
+      );
+      const combinedJuzCompletedCount = Math.max(
+        locDay.juzCompletedCount || 0,
+        remDay.juzCompletedCount || 0,
+        combinedCompletedJuzIds.length
+      );
+
       merged[date] = {
         date,
         secondsRead: Math.max(locDay.secondsRead || 0, remDay.secondsRead || 0),
-        targetReached: Boolean(locDay.targetReached || remDay.targetReached),
+        targetReached: Boolean(locDay.targetReached || remDay.targetReached || combinedJuzCompletedCount > 0),
         slots: combinedSlots,
+        juzCompletedCount: combinedJuzCompletedCount,
+        completedJuzIds: combinedCompletedJuzIds,
       };
     }
   }
@@ -79,6 +93,10 @@ export async function POST(req: Request) {
 
     const body = await req.json();
     const clientState: UserState = body.state;
+    const clientDeviceId: string | undefined = body.deviceId || clientState?.activeDeviceId;
+    const isStartingPlayback: boolean = Boolean(body.isStartingPlayback || body.action === "claim_playback");
+    const clientIsPlaying: boolean =
+      body.isPlaying !== undefined ? Boolean(body.isPlaying) : Boolean(clientState?.isPlaying);
 
     if (!clientState || !clientState.userId) {
       return NextResponse.json({ error: "Invalid state payload" }, { status: 400 });
@@ -116,8 +134,8 @@ export async function POST(req: Request) {
           INSERT INTO user_state (
             user_id, current_juz_id, playback_position_seconds, timer_seconds,
             timer_target_minutes, last_active_date, history_records_json,
-            user_logs_json, settings_json, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            user_logs_json, settings_json, updated_at, active_device_id, is_playing
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `)
         .bind(
           targetUserId,
@@ -129,18 +147,24 @@ export async function POST(req: Request) {
           historyJson,
           logsJson,
           settingsJson,
-          clientState.updatedAt || nowIso
+          clientState.updatedAt || nowIso,
+          clientDeviceId || null,
+          clientIsPlaying ? 1 : 0
         )
         .run();
 
       return NextResponse.json({
         success: true,
         message: "State stored in Cloudflare D1",
-        remoteState: clientState,
+        remoteState: {
+          ...clientState,
+          activeDeviceId: clientDeviceId,
+          isPlaying: clientIsPlaying,
+        },
       });
     }
 
-    // Existing state exists in D1: Reconcile based on timestamp
+    // Existing state exists in D1: Reconcile based on device state and timestamp
     let existingHistory: Record<string, DayReadingRecord> = {};
     let existingLogs: UserLogEntry[] = [];
     try {
@@ -151,7 +175,12 @@ export async function POST(req: Request) {
     } catch {}
 
     const clientTime = new Date(clientState.updatedAt || 0).getTime();
-    const serverTime = new Date(existingRow.updated_at || 0).getTime();
+    const serverUpdatedAtMs = new Date(existingRow.updated_at || 0).getTime();
+    const nowMs = Date.now();
+    const serverActiveDeviceId = existingRow.active_device_id;
+    const serverIsPlaying = Boolean(existingRow.is_playing);
+    // Active playback lease is considered live if updated in the last 60 seconds
+    const isServerPlaybackActive = serverIsPlaying && (nowMs - serverUpdatedAtMs < 60000);
 
     const mergedHistory = mergeHistoryRecords(clientState.historyRecords, existingHistory);
     const mergedLogs = mergeUserLogs(clientState.userLogs, existingLogs);
@@ -162,23 +191,83 @@ export async function POST(req: Request) {
     let resolvedTargetMinutes: number;
     let resolvedLastActive: string;
     let resolvedUpdatedAt: string;
+    let resolvedActiveDeviceId: string | null = serverActiveDeviceId;
+    let resolvedIsPlaying: number = existingRow.is_playing || 0;
 
-    if (clientTime >= serverTime) {
-      // Client is newer or equal
-      resolvedJuzId = clientState.currentJuzId || existingRow.current_juz_id || 1;
-      resolvedPosition = clientState.playbackPositionSeconds ?? existingRow.playback_position_seconds ?? 0;
-      resolvedTimerSeconds = clientState.timerSeconds ?? existingRow.timer_seconds ?? 1800;
-      resolvedTargetMinutes = clientState.timerTargetMinutes ?? existingRow.timer_target_minutes ?? 30;
-      resolvedLastActive = clientState.lastActiveDate || existingRow.last_active_date;
-      resolvedUpdatedAt = clientState.updatedAt || nowIso;
-    } else {
-      // Server is newer
+    if (isStartingPlayback) {
+      // 1. User clicked Play: Claim active playback lease for clientDeviceId
+      resolvedActiveDeviceId = clientDeviceId || null;
+      resolvedIsPlaying = 1;
+      resolvedUpdatedAt = nowIso;
+
+      // If server state was updated more recently from another device, use the server's
+      // latest playback position so the user picks up right where the other device left off.
+      if (serverUpdatedAtMs > clientTime && existingRow.playback_position_seconds > 0) {
+        resolvedJuzId = existingRow.current_juz_id || 1;
+        resolvedPosition = existingRow.playback_position_seconds || 0;
+        resolvedTimerSeconds = existingRow.timer_seconds || 1800;
+        resolvedTargetMinutes = existingRow.timer_target_minutes || 30;
+        resolvedLastActive = existingRow.last_active_date;
+      } else {
+        resolvedJuzId = clientState.currentJuzId || existingRow.current_juz_id || 1;
+        resolvedPosition = clientState.playbackPositionSeconds ?? existingRow.playback_position_seconds ?? 0;
+        resolvedTimerSeconds = clientState.timerSeconds ?? existingRow.timer_seconds ?? 1800;
+        resolvedTargetMinutes = clientState.timerTargetMinutes ?? existingRow.timer_target_minutes ?? 30;
+        resolvedLastActive = clientState.lastActiveDate || existingRow.last_active_date;
+      }
+    } else if (
+      isServerPlaybackActive &&
+      clientDeviceId &&
+      serverActiveDeviceId &&
+      clientDeviceId !== serverActiveDeviceId &&
+      !clientIsPlaying
+    ) {
+      // 2. Another device is actively playing!
+      // Stale idle/paused background sync from this device MUST NOT overwrite active playback.
+      // Merge history and logs, but preserve active device's playback position and track.
       resolvedJuzId = existingRow.current_juz_id || 1;
       resolvedPosition = existingRow.playback_position_seconds || 0;
       resolvedTimerSeconds = existingRow.timer_seconds || 1800;
       resolvedTargetMinutes = existingRow.timer_target_minutes || 30;
       resolvedLastActive = existingRow.last_active_date;
       resolvedUpdatedAt = existingRow.updated_at;
+      resolvedActiveDeviceId = serverActiveDeviceId;
+      resolvedIsPlaying = 1;
+    } else if (clientIsPlaying) {
+      // 3. This device is actively playing (periodic progress sync)
+      resolvedActiveDeviceId = clientDeviceId || null;
+      resolvedIsPlaying = 1;
+      resolvedUpdatedAt = nowIso;
+      resolvedJuzId = clientState.currentJuzId || existingRow.current_juz_id || 1;
+      resolvedPosition = clientState.playbackPositionSeconds ?? existingRow.playback_position_seconds ?? 0;
+      resolvedTimerSeconds = clientState.timerSeconds ?? existingRow.timer_seconds ?? 1800;
+      resolvedTargetMinutes = clientState.timerTargetMinutes ?? existingRow.timer_target_minutes ?? 30;
+      resolvedLastActive = clientState.lastActiveDate || existingRow.last_active_date;
+    } else {
+      // 4. Normal paused or idle sync
+      if (body.action === "pause" || clientIsPlaying === false) {
+        if (!serverActiveDeviceId || serverActiveDeviceId === clientDeviceId) {
+          resolvedIsPlaying = 0;
+        }
+      }
+
+      if (clientTime >= serverUpdatedAtMs) {
+        // Client is newer or equal
+        resolvedJuzId = clientState.currentJuzId || existingRow.current_juz_id || 1;
+        resolvedPosition = clientState.playbackPositionSeconds ?? existingRow.playback_position_seconds ?? 0;
+        resolvedTimerSeconds = clientState.timerSeconds ?? existingRow.timer_seconds ?? 1800;
+        resolvedTargetMinutes = clientState.timerTargetMinutes ?? existingRow.timer_target_minutes ?? 30;
+        resolvedLastActive = clientState.lastActiveDate || existingRow.last_active_date;
+        resolvedUpdatedAt = clientState.updatedAt || nowIso;
+      } else {
+        // Server is newer
+        resolvedJuzId = existingRow.current_juz_id || 1;
+        resolvedPosition = existingRow.playback_position_seconds || 0;
+        resolvedTimerSeconds = existingRow.timer_seconds || 1800;
+        resolvedTargetMinutes = existingRow.timer_target_minutes || 30;
+        resolvedLastActive = existingRow.last_active_date;
+        resolvedUpdatedAt = existingRow.updated_at;
+      }
     }
 
     const mergedHistoryJson = JSON.stringify(mergedHistory);
@@ -197,7 +286,9 @@ export async function POST(req: Request) {
           history_records_json = ?,
           user_logs_json = ?,
           settings_json = ?,
-          updated_at = ?
+          updated_at = ?,
+          active_device_id = ?,
+          is_playing = ?
         WHERE user_id = ?
       `)
       .bind(
@@ -210,6 +301,8 @@ export async function POST(req: Request) {
         mergedLogsJson,
         settingsJson,
         resolvedUpdatedAt,
+        resolvedActiveDeviceId,
+        resolvedIsPlaying,
         targetUserId
       )
       .run();
@@ -225,6 +318,8 @@ export async function POST(req: Request) {
       updatedAt: resolvedUpdatedAt,
       historyRecords: mergedHistory,
       userLogs: mergedLogs,
+      activeDeviceId: resolvedActiveDeviceId || undefined,
+      isPlaying: Boolean(resolvedIsPlaying),
     };
 
     return NextResponse.json({
@@ -304,6 +399,8 @@ export async function GET(req: Request) {
       updatedAt: row.updated_at,
       historyRecords,
       userLogs,
+      activeDeviceId: row.active_device_id || undefined,
+      isPlaying: Boolean(row.is_playing),
     };
 
     return NextResponse.json({ success: true, state });

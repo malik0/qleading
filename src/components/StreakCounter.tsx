@@ -1,23 +1,75 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useApp } from "../context/AppContext";
 import { DayOfWeek } from "../types/quran";
 import { getLocalDateString } from "../lib/utils";
-import { Calendar, ChevronLeft, ChevronRight, Flame, Trophy } from "lucide-react";
+import {
+  Calendar,
+  ChevronLeft,
+  ChevronRight,
+  Flame,
+  Trophy,
+  X,
+  Pencil,
+  Minus,
+  Plus,
+  Check,
+  CheckCircle2,
+  Clock,
+} from "lucide-react";
 
 const DAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"]; // 0=Sun, 1=Mon, ..., 6=Sat
 
+interface DayStatsData {
+  date: Date;
+  dateStr: string;
+  formattedDate: string;
+  secondsRead: number;
+  completed: boolean;
+  targetMinutes: number;
+  juzCompletedCount: number;
+  completedJuzIds: number[];
+}
+
 export const StreakCounter: React.FC = () => {
-  const { historyRecords, settings, todayRecord } = useApp();
+  const {
+    historyRecords,
+    settings,
+    todayRecord,
+    streakTargetMinutes,
+    setStreakTargetMinutes,
+    juzList,
+  } = useApp();
   const [showMonthlyCalendar, setShowMonthlyCalendar] = useState(false);
+  const [showTargetModal, setShowTargetModal] = useState(false);
+  const [selectedDayStats, setSelectedDayStats] = useState<DayStatsData | null>(null);
+  const [tempTargetMinutes, setTempTargetMinutes] = useState(streakTargetMinutes);
   const [calendarMonthOffset, setCalendarMonthOffset] = useState(0);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!showMonthlyCalendar && !showTargetModal && !selectedDayStats) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setShowMonthlyCalendar(false);
+        setShowTargetModal(false);
+        setSelectedDayStats(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [showMonthlyCalendar, showTargetModal, selectedDayStats]);
 
   const todayStr = getLocalDateString();
   const todayDate = new Date();
 
   // 4.2 WEEKLY VIEW BASED ON STREAK START DAY
-  // Build the 7 days of the current streak week based on settings.streakStartDay
   const weeklyDays = useMemo(() => {
     const currentDayOfWeek = todayDate.getDay() as DayOfWeek;
     const startDay = settings.streakStartDay ?? 1; // default Monday (1)
@@ -29,6 +81,8 @@ export const StreakCounter: React.FC = () => {
     const startDate = new Date(todayDate);
     startDate.setDate(todayDate.getDate() - diff);
 
+    const targetSeconds = (streakTargetMinutes || 30) * 60;
+
     const days = [];
     for (let i = 0; i < 7; i++) {
       const d = new Date(startDate);
@@ -38,8 +92,21 @@ export const StreakCounter: React.FC = () => {
       const isToday = dateStr === todayStr;
       const isFuture = dateStr > todayStr;
 
-      const record = historyRecords[dateStr];
-      const completed = record?.targetReached || (isToday && todayRecord.targetReached);
+      const record = isToday ? todayRecord : historyRecords[dateStr];
+      const juzCompletedCount = isToday
+        ? todayRecord.juzCompletedCount || (todayRecord.completedJuzIds ? todayRecord.completedJuzIds.length : 0)
+        : record?.juzCompletedCount || (record?.completedJuzIds ? record?.completedJuzIds.length : 0);
+      const completedJuzIds = isToday
+        ? todayRecord.completedJuzIds || []
+        : record?.completedJuzIds || [];
+
+      const completed = Boolean(
+        record?.targetReached ||
+        (isToday && todayRecord.targetReached) ||
+        juzCompletedCount > 0
+      );
+      const secondsRead = isToday ? todayRecord.secondsRead : record?.secondsRead || 0;
+      const progress = completed ? 1 : Math.min(1, Math.max(0, secondsRead / targetSeconds));
 
       days.push({
         date: d,
@@ -50,24 +117,45 @@ export const StreakCounter: React.FC = () => {
         isToday,
         isFuture,
         completed,
+        secondsRead,
+        progress,
+        juzCompletedCount,
+        completedJuzIds,
       });
     }
     return days;
-  }, [historyRecords, settings.streakStartDay, todayRecord.targetReached, todayStr]);
+  }, [
+    historyRecords,
+    settings.streakStartDay,
+    streakTargetMinutes,
+    todayRecord.targetReached,
+    todayRecord.secondsRead,
+    todayRecord.juzCompletedCount,
+    todayRecord.completedJuzIds,
+    todayStr,
+  ]);
 
-  // 4.4 QUICK STATS: PAST 30 DAYS SUCCESS
+  // 4.4 QUICK STATS: PAST 30 DAYS SUCCESS (UPDATED VIA JUZ TALLY & TARGET)
   const stats30Days = useMemo(() => {
     let completedCount = 0;
     for (let i = 1; i <= 30; i++) {
       const d = new Date(todayDate);
       d.setDate(todayDate.getDate() - i);
       const dateStr = getLocalDateString(d);
-      if (historyRecords[dateStr]?.targetReached) {
+      const rec = historyRecords[dateStr];
+      if (
+        rec &&
+        (rec.targetReached ||
+          (rec.juzCompletedCount !== undefined && rec.juzCompletedCount > 0))
+      ) {
         completedCount++;
       }
     }
     // Also include today if completed
-    if (todayRecord.targetReached) {
+    if (
+      todayRecord.targetReached ||
+      (todayRecord.juzCompletedCount !== undefined && todayRecord.juzCompletedCount > 0)
+    ) {
       completedCount++;
     }
     const percent = Math.round((completedCount / 30) * 100);
@@ -75,7 +163,7 @@ export const StreakCounter: React.FC = () => {
       completedCount,
       percent,
     };
-  }, [historyRecords, todayRecord.targetReached]);
+  }, [historyRecords, todayRecord.targetReached, todayRecord.juzCompletedCount]);
 
   // 4.3 MONTHLY CALENDAR VIEW DAYS
   const calendarDays = useMemo(() => {
@@ -103,15 +191,32 @@ export const StreakCounter: React.FC = () => {
       const isToday = dateStr === todayStr;
       const isFuture = dateStr > todayStr;
       const record = historyRecords[dateStr];
-      const completed = record?.targetReached || (isToday && todayRecord.targetReached);
+
+      const juzCompletedCount = isToday
+        ? todayRecord.juzCompletedCount || (todayRecord.completedJuzIds ? todayRecord.completedJuzIds.length : 0)
+        : record?.juzCompletedCount || (record?.completedJuzIds ? record?.completedJuzIds.length : 0);
+      const completedJuzIds = isToday
+        ? todayRecord.completedJuzIds || []
+        : record?.completedJuzIds || [];
+      const secondsRead = isToday ? todayRecord.secondsRead : record?.secondsRead || 0;
+
+      const completed = Boolean(
+        record?.targetReached ||
+        (isToday && todayRecord.targetReached) ||
+        juzCompletedCount > 0
+      );
 
       daysArray.push({
+        date: d,
         dateStr,
         day,
         isPast,
         isToday,
         isFuture,
         completed,
+        secondsRead,
+        juzCompletedCount,
+        completedJuzIds,
       });
     }
     return {
@@ -121,7 +226,15 @@ export const StreakCounter: React.FC = () => {
       }),
       days: daysArray,
     };
-  }, [calendarMonthOffset, historyRecords, todayRecord.targetReached, todayStr]);
+  }, [
+    calendarMonthOffset,
+    historyRecords,
+    todayRecord.targetReached,
+    todayRecord.secondsRead,
+    todayRecord.juzCompletedCount,
+    todayRecord.completedJuzIds,
+    todayStr,
+  ]);
 
   return (
     <div className="w-full bg-surface-card border border-surface-border rounded-3xl p-5 sm:p-6 backdrop-blur-xl shadow-xl space-y-4 transition-colors duration-200">
@@ -133,9 +246,17 @@ export const StreakCounter: React.FC = () => {
           </div>
           <div>
             <h2 className="text-base font-bold text-content-primary">Daily Streak</h2>
-            <p className="text-xs text-content-muted">
-              Target: {settings.timerTargetMinutes} min daily
-            </p>
+            <button
+              onClick={() => {
+                setTempTargetMinutes(streakTargetMinutes);
+                setShowTargetModal(true);
+              }}
+              title="Click to adjust daily streak target"
+              className="group flex items-center gap-1.5 text-xs text-content-muted hover:text-brand-primary transition cursor-pointer mt-0.5"
+            >
+              <span>Target: {streakTargetMinutes} min daily</span>
+              <Pencil className="w-3 h-3 text-brand-primary opacity-60 group-hover:opacity-100 transition-opacity" />
+            </button>
           </div>
         </div>
 
@@ -153,7 +274,7 @@ export const StreakCounter: React.FC = () => {
           <button
             onClick={() => setShowMonthlyCalendar(true)}
             title="Open Monthly Calendar"
-            className="p-2 rounded-xl bg-surface-subtle hover:bg-surface-hover text-content-secondary hover:text-content-primary border border-surface-border transition shadow-sm"
+            className="p-2 rounded-xl bg-surface-subtle hover:bg-surface-hover text-content-secondary hover:text-content-primary border border-surface-border transition shadow-sm cursor-pointer"
           >
             <Calendar className="w-4 h-4" />
           </button>
@@ -164,50 +285,142 @@ export const StreakCounter: React.FC = () => {
       <div className="pt-2">
         <div className="flex items-center justify-between gap-1 sm:gap-2">
           {weeklyDays.map((item, idx) => {
-            // Requirement 4.1:
-            // If timer completes by reaching target: colored theme primary
-            // If timer reaches midnight and timer has not been completed: colored gray
-            let circleBg = "bg-surface-subtle border-surface-border text-content-muted"; // default / future
+            const CIRCLE_RADIUS = 20;
+            const CIRCUMFERENCE = 2 * Math.PI * CIRCLE_RADIUS;
+            const strokeDashoffset = CIRCUMFERENCE * (1 - item.progress);
+
+            // Inner badge style
+            let innerBadgeStyle = "bg-surface-subtle/70 text-content-muted"; // default / future
 
             if (item.completed) {
-              // Target reached -> Theme Primary
-              circleBg =
-                "bg-brand-primary text-white font-bold border-transparent shadow-md scale-105";
-            } else if (item.isPast) {
-              // Midnight passed without completion -> Gray
-              circleBg =
-                "bg-surface-hover text-content-muted border-surface-border";
+              innerBadgeStyle =
+                "bg-brand-primary text-white font-bold shadow-md scale-105";
             } else if (item.isToday) {
-              // In-progress today
-              circleBg =
-                "bg-surface-subtle border-2 border-brand-primary text-brand-primary animate-pulse";
+              innerBadgeStyle =
+                "bg-brand-light text-brand-primary font-bold shadow-inner";
+            } else if (item.isPast) {
+              innerBadgeStyle =
+                "bg-surface-hover text-content-muted";
             }
 
+            const tooltip = `${item.dateStr}: ${
+              item.completed
+                ? "Daily goal reached"
+                : `${Math.round(item.progress * 100)}% completed`
+            } (${Math.round(item.secondsRead / 60)}/${streakTargetMinutes}m) • Click for stats`;
+
             return (
-              <div
+              <button
+                type="button"
                 key={idx}
-                className="flex flex-col items-center flex-1 space-y-1.5"
+                className="flex flex-col items-center flex-1 space-y-1.5 cursor-pointer group hover:scale-105 active:scale-95 transition-all outline-none"
+                onClick={() => {
+                  setSelectedDayStats({
+                    date: item.date,
+                    dateStr: item.dateStr,
+                    formattedDate: item.date.toLocaleDateString("en-US", {
+                      weekday: "long",
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                    }),
+                    secondsRead: item.secondsRead,
+                    completed: item.completed,
+                    targetMinutes: streakTargetMinutes,
+                    juzCompletedCount: item.juzCompletedCount,
+                    completedJuzIds: item.completedJuzIds,
+                  });
+                }}
+                title={tooltip}
               >
-                {/* 4.1 Day Circle */}
-                <div
-                  className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center border text-sm sm:text-base font-bold transition-all select-none ${circleBg}`}
-                >
-                  {item.dayLetter}
+                {/* 4.1 Day Circle with Progress Bar Border */}
+                <div className="relative w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center select-none">
+                  {/* SVG Circular Border Progress Bar */}
+                  <svg
+                    className="absolute inset-0 w-full h-full -rotate-90 pointer-events-none"
+                    viewBox="0 0 48 48"
+                  >
+                    {/* Background track */}
+                    <circle
+                      cx="24"
+                      cy="24"
+                      r={CIRCLE_RADIUS}
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="3"
+                      className="text-surface-border"
+                    />
+                    {/* Progress stroke */}
+                    {item.progress > 0 && (
+                      <circle
+                        cx="24"
+                        cy="24"
+                        r={CIRCLE_RADIUS}
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="3"
+                        strokeLinecap="round"
+                        strokeDasharray={CIRCUMFERENCE}
+                        strokeDashoffset={strokeDashoffset}
+                        className={`transition-all duration-500 ease-out ${
+                          item.completed
+                            ? "text-brand-primary"
+                            : item.isToday
+                            ? "text-brand-primary"
+                            : "text-brand-primary/60"
+                        }`}
+                      />
+                    )}
+                  </svg>
+
+                  {/* Date Initial (M, T, W, T, F, S, S) */}
+                  <div
+                    className={`w-7 h-7 sm:w-8.5 sm:h-8.5 rounded-full flex items-center justify-center text-xs sm:text-sm font-bold transition-all z-10 ${innerBadgeStyle}`}
+                  >
+                    {item.dayLetter}
+                  </div>
                 </div>
+
+                {/* Requirement: Little dot/circle beneath it for every Juz finished that day */}
+                {item.juzCompletedCount > 0 ? (
+                  <div
+                    className="flex items-center justify-center gap-0.5"
+                    title={`${item.juzCompletedCount} Juz finished`}
+                  >
+                    {Array.from({ length: Math.min(item.juzCompletedCount, 4) }).map((_, dotIdx) => (
+                      <span
+                        key={dotIdx}
+                        className="w-1.5 h-1.5 rounded-full bg-brand-primary ring-1 ring-brand-primary/30"
+                      />
+                    ))}
+                    {item.juzCompletedCount > 4 && (
+                      <span className="text-[9px] font-bold text-brand-primary leading-none">
+                        +{item.juzCompletedCount - 4}
+                      </span>
+                    )}
+                  </div>
+                ) : null}
+
                 {/* Date number */}
                 <span className="text-[11px] font-mono text-content-muted">
                   {item.dayNum}
                 </span>
-              </div>
+              </button>
             );
           })}
         </div>
       </div>
 
       {/* 4.3 MONTHLY CALENDAR MODAL */}
-      {showMonthlyCalendar && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-surface-card border border-surface-border rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+      {showMonthlyCalendar && mounted && createPortal(
+        <div
+          onClick={() => setShowMonthlyCalendar(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fadeIn"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-surface-card border border-surface-border rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto"
+          >
             {/* Header with Month Navigation */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -219,15 +432,24 @@ export const StreakCounter: React.FC = () => {
               <div className="flex items-center gap-1">
                 <button
                   onClick={() => setCalendarMonthOffset((prev) => prev - 1)}
+                  title="Previous month"
                   className="p-1.5 rounded-lg bg-surface-subtle hover:bg-surface-hover text-content-secondary border border-surface-border"
                 >
                   <ChevronLeft className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => setCalendarMonthOffset((prev) => prev + 1)}
+                  title="Next month"
                   className="p-1.5 rounded-lg bg-surface-subtle hover:bg-surface-hover text-content-secondary border border-surface-border"
                 >
                   <ChevronRight className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setShowMonthlyCalendar(false)}
+                  title="Close calendar"
+                  className="p-1.5 rounded-lg bg-surface-subtle hover:bg-surface-hover text-content-muted hover:text-content-primary border border-surface-border transition ml-1"
+                >
+                  <X className="w-4 h-4" />
                 </button>
               </div>
             </div>
@@ -245,7 +467,7 @@ export const StreakCounter: React.FC = () => {
             <div className="grid grid-cols-7 gap-1.5">
               {calendarDays.days.map((dayItem, index) => {
                 if (!dayItem) {
-                  return <div key={`empty-${index}`} className="h-9" />;
+                  return <div key={`empty-${index}`} className="h-11" />;
                 }
 
                 let colorStyle = "bg-surface-subtle/50 border-surface-border text-content-muted/60";
@@ -258,19 +480,50 @@ export const StreakCounter: React.FC = () => {
                 }
 
                 return (
-                  <div
+                  <button
+                    type="button"
                     key={dayItem.dateStr}
+                    onClick={() => {
+                      setSelectedDayStats({
+                        date: dayItem.date,
+                        dateStr: dayItem.dateStr,
+                        formattedDate: dayItem.date.toLocaleDateString("en-US", {
+                          weekday: "long",
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        }),
+                        secondsRead: dayItem.secondsRead,
+                        completed: dayItem.completed,
+                        targetMinutes: streakTargetMinutes,
+                        juzCompletedCount: dayItem.juzCompletedCount,
+                        completedJuzIds: dayItem.completedJuzIds,
+                      });
+                    }}
                     title={`${dayItem.dateStr}: ${
                       dayItem.completed
                         ? "Target Completed"
                         : dayItem.isPast
                         ? "Not Completed"
                         : "Upcoming / Today"
-                    }`}
-                    className={`h-9 rounded-full flex items-center justify-center border text-xs font-medium ${colorStyle}`}
+                    } • Click for stats`}
+                    className={`h-11 rounded-2xl flex flex-col items-center justify-center border text-xs font-medium cursor-pointer transition-all hover:scale-105 active:scale-95 ${colorStyle}`}
                   >
-                    {dayItem.day}
-                  </div>
+                    <span className="leading-tight">{dayItem.day}</span>
+                    {/* Multi-Juz dots in calendar */}
+                    {dayItem.juzCompletedCount > 0 && (
+                      <div className="flex items-center justify-center gap-0.5 mt-0.5">
+                        {Array.from({ length: Math.min(dayItem.juzCompletedCount, 3) }).map((_, dotIdx) => (
+                          <span
+                            key={dotIdx}
+                            className={`w-1 h-1 rounded-full ${
+                              dayItem.completed ? "bg-white" : "bg-brand-primary"
+                            }`}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </button>
                 );
               })}
             </div>
@@ -294,13 +547,252 @@ export const StreakCounter: React.FC = () => {
             <div className="pt-2">
               <button
                 onClick={() => setShowMonthlyCalendar(false)}
-                className="w-full py-2.5 rounded-xl bg-surface-subtle hover:bg-surface-hover text-content-primary font-medium text-sm border border-surface-border transition"
+                className="w-full py-2.5 rounded-xl bg-surface-subtle hover:bg-surface-hover text-content-primary font-medium text-sm border border-surface-border transition cursor-pointer"
               >
                 Close Calendar
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
+      )}
+
+      {/* DAY READING STATS MODAL (CLICKED FROM STREAK OR CALENDAR) */}
+      {selectedDayStats && mounted && createPortal(
+        <div
+          onClick={() => setSelectedDayStats(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fadeIn"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-surface-card border border-surface-border rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto"
+          >
+            <div className="flex items-center justify-between border-b border-surface-border pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-brand-light text-brand-primary">
+                  <Clock className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-content-primary">
+                    Reading Stats
+                  </h3>
+                  <p className="text-xs text-content-muted">
+                    {selectedDayStats.formattedDate}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedDayStats(null)}
+                title="Close"
+                className="p-1.5 rounded-lg bg-surface-subtle hover:bg-surface-hover text-content-muted hover:text-content-primary border border-surface-border transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Minutes Read Display */}
+            <div className="bg-surface-subtle border border-surface-border rounded-2xl p-4 text-center space-y-1">
+              <span className="text-xs text-content-muted font-medium uppercase tracking-wider block">
+                Total Reading Time
+              </span>
+              <div className="text-3xl font-extrabold font-mono text-content-primary">
+                {Math.round(selectedDayStats.secondsRead / 60)} min
+              </div>
+              <p className="text-xs text-content-muted">
+                Daily Goal: {selectedDayStats.targetMinutes} minutes
+              </p>
+            </div>
+
+            {/* Target Status Pill */}
+            <div className="flex items-center justify-between p-3 rounded-xl bg-surface-subtle border border-surface-border">
+              <span className="text-xs font-medium text-content-secondary">
+                Daily Goal Status
+              </span>
+              {selectedDayStats.completed ? (
+                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-primary bg-brand-light px-2.5 py-1 rounded-full border border-brand-primary/20">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  Target Reached
+                </span>
+              ) : (
+                <span className="text-xs text-content-muted font-medium bg-surface-card px-2.5 py-1 rounded-full border border-surface-border">
+                  {Math.max(
+                    0,
+                    selectedDayStats.targetMinutes -
+                      Math.round(selectedDayStats.secondsRead / 60)
+                  )}{" "}
+                  min left
+                </span>
+              )}
+            </div>
+
+            {/* Completed Juzes on this Day */}
+            <div className="space-y-2">
+              <span className="text-xs font-semibold text-content-muted uppercase tracking-wider block">
+                Juzes Completed This Day ({selectedDayStats.juzCompletedCount})
+              </span>
+              {selectedDayStats.completedJuzIds && selectedDayStats.completedJuzIds.length > 0 ? (
+                <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                  {selectedDayStats.completedJuzIds.map((juzId, i) => {
+                    const jInfo = juzList.find((j) => j.id === juzId);
+                    return (
+                      <div
+                        key={`${juzId}-${i}`}
+                        className="flex items-center gap-2.5 p-2 rounded-xl bg-brand-light/30 border border-brand-primary/20"
+                      >
+                        <span className="w-6 h-6 rounded-lg bg-brand-primary text-white font-bold text-xs flex items-center justify-center shrink-0">
+                          {juzId}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <span className="text-xs font-semibold text-content-primary truncate block">
+                            {jInfo?.customName || jInfo?.defaultName || `Juz ${juzId}`}
+                          </span>
+                        </div>
+                        <Check className="w-3.5 h-3.5 text-brand-primary shrink-0 stroke-[2.5]" />
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : selectedDayStats.juzCompletedCount > 0 ? (
+                <p className="text-xs text-brand-primary font-medium p-2.5 rounded-xl bg-brand-light/40 border border-brand-primary/20">
+                  {selectedDayStats.juzCompletedCount} Juz finished on this day
+                </p>
+              ) : (
+                <p className="text-xs text-content-muted p-2 rounded-xl bg-surface-subtle text-center">
+                  No Juz finished on this date
+                </p>
+              )}
+            </div>
+
+            <button
+              onClick={() => setSelectedDayStats(null)}
+              className="w-full py-2.5 rounded-xl bg-surface-subtle hover:bg-surface-hover text-content-primary font-medium text-xs border border-surface-border transition cursor-pointer"
+            >
+              Close
+            </button>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* DAILY STREAK TARGET MODAL */}
+      {showTargetModal && mounted && createPortal(
+        <div
+          onClick={() => setShowTargetModal(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fadeIn"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-surface-card border border-surface-border rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-5"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 rounded-xl bg-brand-light text-brand-primary">
+                  <Flame className="w-5 h-5 fill-current" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-content-primary">
+                    Daily Streak Target
+                  </h3>
+                  <p className="text-xs text-content-muted">
+                    Set daily reading habit goal
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowTargetModal(false)}
+                title="Close"
+                className="p-1.5 rounded-lg bg-surface-subtle hover:bg-surface-hover text-content-muted hover:text-content-primary border border-surface-border transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Quick presets */}
+            <div>
+              <label className="text-xs text-content-muted block mb-2 font-medium">
+                Quick Presets:
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {[15, 20, 30, 45, 60, 90].map((mins) => {
+                  const isSelected = tempTargetMinutes === mins;
+                  return (
+                    <button
+                      key={mins}
+                      type="button"
+                      onClick={() => setTempTargetMinutes(mins)}
+                      className={`py-2 px-2.5 rounded-xl text-xs font-mono font-bold transition border cursor-pointer ${
+                        isSelected
+                          ? "bg-brand-primary text-white border-brand-primary shadow-md"
+                          : "bg-surface-subtle hover:bg-surface-hover text-content-secondary border-surface-border"
+                      }`}
+                    >
+                      {mins}m
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Custom Minutes Stepper */}
+            <div>
+              <label className="text-xs text-content-muted block mb-2 font-medium">
+                Custom Target (1 - 720 minutes):
+              </label>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setTempTargetMinutes((prev) => Math.max(1, prev - 5))}
+                  title="Decrease by 5 minutes"
+                  className="p-2.5 rounded-xl bg-surface-subtle hover:bg-surface-hover border border-surface-border text-content-secondary hover:text-content-primary transition cursor-pointer"
+                >
+                  <Minus className="w-4 h-4" />
+                </button>
+                <input
+                  type="number"
+                  min={1}
+                  max={720}
+                  value={tempTargetMinutes}
+                  onChange={(e) =>
+                    setTempTargetMinutes(
+                      Math.max(1, Math.min(720, parseInt(e.target.value, 10) || 1))
+                    )
+                  }
+                  className="flex-1 bg-surface-subtle border border-surface-border rounded-xl px-3 py-2 text-center text-base font-mono font-bold text-content-primary focus:outline-none focus:border-brand-primary"
+                />
+                <button
+                  type="button"
+                  onClick={() => setTempTargetMinutes((prev) => Math.min(720, prev + 5))}
+                  title="Increase by 5 minutes"
+                  className="p-2.5 rounded-xl bg-surface-subtle hover:bg-surface-hover border border-surface-border text-content-secondary hover:text-content-primary transition cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowTargetModal(false)}
+                className="flex-1 py-2.5 rounded-xl bg-surface-subtle hover:bg-surface-hover text-content-secondary font-medium text-xs border border-surface-border transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setStreakTargetMinutes(tempTargetMinutes);
+                  setShowTargetModal(false);
+                }}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-brand-primary hover:bg-brand-hover text-white font-bold text-xs shadow-md transition active:scale-95 cursor-pointer"
+              >
+                <Check className="w-4 h-4" />
+                <span>Save Target</span>
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );

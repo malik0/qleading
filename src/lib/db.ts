@@ -45,6 +45,8 @@ export async function ensureTables(db: D1Database): Promise<void> {
         user_logs_json TEXT NOT NULL DEFAULT '[]',
         settings_json TEXT NOT NULL DEFAULT '{}',
         updated_at TEXT NOT NULL,
+        active_device_id TEXT,
+        is_playing INTEGER DEFAULT 0,
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
       );
 
@@ -59,6 +61,15 @@ export async function ensureTables(db: D1Database): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
       CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
     `);
+
+    // Safely add columns if user_state was created previously without them
+    try {
+      await db.exec("ALTER TABLE user_state ADD COLUMN active_device_id TEXT;");
+    } catch (_) {}
+    try {
+      await db.exec("ALTER TABLE user_state ADD COLUMN is_playing INTEGER DEFAULT 0;");
+    } catch (_) {}
+
     tablesInitialized = true;
   } catch (error) {
     console.warn("Notice: ensureTables execution returned:", error);

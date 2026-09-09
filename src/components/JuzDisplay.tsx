@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useApp } from "../context/AppContext";
 import { formatAudioTime, formatHeroTimer } from "../lib/utils";
-import { ChevronDown, Volume2, Download, SlidersHorizontal } from "lucide-react";
+import { ChevronDown, Volume2, SlidersHorizontal, Clock } from "lucide-react";
 import { TimerModal } from "./TimerModal";
 
 export const JuzDisplay: React.FC = () => {
@@ -21,15 +21,46 @@ export const JuzDisplay: React.FC = () => {
     selectJuz,
     timerSeconds,
     isTimerRunning,
+    todayRecord,
   } = useApp();
 
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isTimerModalOpen, setIsTimerModalOpen] = useState(false);
+  const [currentDateTime, setCurrentDateTime] = useState<Date | null>(null);
+
+  useEffect(() => {
+    setCurrentDateTime(new Date());
+    const interval = setInterval(() => {
+      setCurrentDateTime(new Date());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Time remaining adjusted for playback speed (Requirement 1.3)
   const rawRemainingSeconds = Math.max(0, duration - playbackPosition);
   const adjustedRemainingSeconds = rawRemainingSeconds / playbackSpeed;
   const adjustedElapsedSeconds = playbackPosition / playbackSpeed;
+
+  // Remaining timer seconds until daily target
+  const remainingTimerSeconds = Math.max(0, timerSeconds);
+
+  const finishDate =
+    currentDateTime && remainingTimerSeconds > 0
+      ? new Date(currentDateTime.getTime() + remainingTimerSeconds * 1000)
+      : null;
+
+  const finishTimeStr = finishDate
+    ? `${String(finishDate.getHours()).padStart(2, "0")}:${String(finishDate.getMinutes()).padStart(2, "0")}`
+    : "";
+
+  const formattedDateTime = currentDateTime
+    ? `${currentDateTime.toLocaleDateString("en-US", {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      })} • ${String(currentDateTime.getHours()).padStart(2, "0")}:${String(currentDateTime.getMinutes()).padStart(2, "0")}`
+    : "";
 
   const progressPercent =
     duration > 0
@@ -41,6 +72,12 @@ export const JuzDisplay: React.FC = () => {
     const newPos = (val / 100) * duration;
     seekTo(newPos);
   };
+
+  // Requirement 1 & 8: Juz tally of the day displayed as small filled circle(s)
+  // above the date but below the border of the Juz Display
+  const todayJuzCount =
+    todayRecord.juzCompletedCount ||
+    (todayRecord.completedJuzIds ? todayRecord.completedJuzIds.length : 0);
 
   return (
     <div className="w-full bg-surface-card border border-surface-border rounded-3xl p-4 sm:p-5 backdrop-blur-xl shadow-2xl relative overflow-hidden transition-colors duration-200">
@@ -68,7 +105,27 @@ export const JuzDisplay: React.FC = () => {
           title="Click to adjust timer default value or reset timer"
           className="group flex flex-col items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary rounded-3xl px-6 py-2 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
         >
-          {/* Active status indicator */}
+          {/* Requirement 1: The Juz tally of the day should appear as a small filled circle above the date but below the border of the Juz Display */}
+          {todayJuzCount > 0 && (
+            <div
+              className="flex items-center justify-center gap-1.5 mb-1.5"
+              title={`${todayJuzCount} Juz completed today`}
+            >
+              {Array.from({ length: Math.min(todayJuzCount, 12) }).map((_, idx) => (
+                <span
+                  key={idx}
+                  className="w-2.5 h-2.5 rounded-full bg-brand-primary shadow-sm ring-2 ring-brand-primary/20 transition-all"
+                />
+              ))}
+              {todayJuzCount > 12 && (
+                <span className="text-[10px] font-bold text-brand-primary font-mono leading-none">
+                  +{todayJuzCount - 12}
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Active status indicator & Today's Date and Time */}
           <div className="flex items-center gap-2 mb-1">
             <span
               className={`w-2 h-2 rounded-full transition-all ${
@@ -77,8 +134,8 @@ export const JuzDisplay: React.FC = () => {
                   : "bg-content-muted/40"
               }`}
             />
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-content-muted group-hover:text-brand-primary transition">
-              {isTimerRunning ? "Reading Active" : "Reading Timer"}
+            <span className="text-xs font-semibold tracking-wide text-content-muted group-hover:text-brand-primary transition">
+              {formattedDateTime || "\u00A0"}
             </span>
           </div>
 
@@ -92,8 +149,20 @@ export const JuzDisplay: React.FC = () => {
             {formatHeroTimer(timerSeconds)}
           </div>
 
+          {/* Small text indicating when it will finish */}
+          {currentDateTime && (
+            <div className="text-xs sm:text-sm text-content-muted font-medium mt-1 mb-0.5 flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5 text-brand-primary opacity-80" />
+              <span>
+                {timerSeconds > 0
+                  ? `Finishes at ${finishTimeStr}`
+                  : "Target completed"}
+              </span>
+            </div>
+          )}
+
           {/* Interactive Hint Pill */}
-          <div className="mt-1 flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] bg-surface-subtle group-hover:bg-surface-hover border border-surface-border text-content-muted group-hover:text-content-primary transition shadow-sm">
+          <div className="mt-1.5 flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] bg-surface-subtle group-hover:bg-surface-hover border border-surface-border text-content-muted group-hover:text-content-primary transition shadow-sm">
             <SlidersHorizontal className="w-3 h-3 text-brand-primary group-hover:rotate-90 transition-transform duration-300" />
             <span>Click to adjust or reset</span>
           </div>
@@ -105,7 +174,7 @@ export const JuzDisplay: React.FC = () => {
 
       {/* 1.0 & 1.1 JUZ TITLE & SURAH RANGE */}
       <div className="flex flex-col items-center text-center space-y-1.5 relative">
-        {/* Juz Selector Dropdown & Download Button */}
+        {/* Juz Selector Dropdown */}
         <div className="flex items-center gap-2 relative">
           <div className="relative inline-block">
             <button
@@ -137,24 +206,32 @@ export const JuzDisplay: React.FC = () => {
                       <button
                         key={item.id}
                         onClick={() => {
-                          setIsDropdownOpen(false);
                           selectJuz(item.id);
+                          setIsDropdownOpen(false);
                         }}
-                        className={`w-full text-left px-3 py-2.5 rounded-xl text-sm flex flex-col transition ${
+                        className={`w-full text-left px-3 py-2.5 rounded-xl flex items-center justify-between text-xs sm:text-sm transition ${
                           isCurrent
-                            ? "bg-brand-light text-brand-primary border border-brand-primary/30"
+                            ? "bg-brand-primary text-white font-semibold shadow-sm"
                             : "hover:bg-surface-subtle text-content-secondary hover:text-content-primary"
                         }`}
                       >
-                        <div className="flex items-center justify-between">
-                          <span className="font-semibold">{displayName}</span>
-                          {isCurrent && (
-                            <span className="text-[10px] bg-brand-primary text-white font-bold px-1.5 py-0.5 rounded">
-                              Playing
-                            </span>
-                          )}
+                        <div className="flex items-center gap-2.5">
+                          <span
+                            className={`w-6 h-6 rounded-lg flex items-center justify-center font-bold text-xs ${
+                              isCurrent
+                                ? "bg-white/20 text-white"
+                                : "bg-surface-subtle text-content-muted"
+                            }`}
+                          >
+                            {item.id}
+                          </span>
+                          <span className="font-medium truncate">{displayName}</span>
                         </div>
-                        <span className="text-xs text-content-muted line-clamp-1 mt-0.5">
+                        <span
+                          className={`text-xs font-mono shrink-0 ${
+                            isCurrent ? "text-white/80" : "text-content-muted"
+                          }`}
+                        >
                           {displayRange}
                         </span>
                       </button>
@@ -164,26 +241,16 @@ export const JuzDisplay: React.FC = () => {
               </div>
             )}
           </div>
-
-          {/* Direct Download Button */}
-          <a
-            href={currentJuz.localAudioUrl}
-            download={`${juzName.replace(/\s+/g, "_")}_MaherAlMuaiqly.webm`}
-            title={`Download ${juzName} Audio (${currentJuz.defaultName})`}
-            className="p-2 sm:p-2.5 rounded-2xl bg-surface-subtle hover:bg-surface-hover border border-surface-border text-content-secondary hover:text-content-primary transition flex items-center justify-center shadow-md group"
-          >
-            <Download className="w-5 h-5 text-brand-primary group-hover:scale-110 transition" />
-          </a>
         </div>
 
         {/* 1.1 Juz Range currently playing */}
-        <p className="text-xs sm:text-sm text-content-secondary max-w-xl font-medium px-4">
-          {juzRange}
+        <p className="text-xs sm:text-sm text-content-muted font-medium">
+          Surah Range: <span className="text-content-primary font-semibold">{juzRange}</span>
         </p>
       </div>
 
       {/* 1.3 SYNCHRONIZED PROGRESS BAR WITH SPEED ADJUSTMENTS */}
-      <div className="mt-4 space-y-1.5">
+      <div className="mt-4 space-y-2">
         {/* Interactive Scrub Bar */}
         <div className="relative group">
           <input
@@ -193,13 +260,16 @@ export const JuzDisplay: React.FC = () => {
             step="0.05"
             value={progressPercent}
             onChange={handleScrub}
-            style={{ accentColor: "var(--color-primary)" }}
-            className="w-full h-2.5 bg-surface-subtle rounded-lg appearance-none cursor-pointer transition-all focus:outline-none"
+            style={{
+              accentColor: "var(--color-primary)",
+              background: `linear-gradient(to right, var(--color-primary) ${progressPercent}%, var(--bg-card-subtle) ${progressPercent}%)`,
+            }}
+            className="w-full h-2.5 rounded-lg appearance-none cursor-pointer transition-all focus:outline-none border border-surface-border shadow-inner"
             aria-label="Audio progress scrub"
           />
         </div>
 
-        {/* Left and Right Timestamps */}
+        {/* Left and Right Timestamps with Percentage Completed */}
         <div className="flex items-center justify-between text-xs text-content-muted font-mono px-1">
           {/* Elapsed Time */}
           <div className="flex flex-col items-start">
@@ -208,14 +278,22 @@ export const JuzDisplay: React.FC = () => {
             </span>
             {playbackSpeed !== 1.0 && (
               <span className="text-[10px] text-content-muted">
-                adj: {formatAudioTime(adjustedElapsedSeconds)}
+                Live adjustment: {formatAudioTime(adjustedElapsedSeconds)}
               </span>
             )}
           </div>
 
-          {/* Speed Indicator in Middle */}
-          <div className="text-[11px] text-brand-primary font-sans font-medium bg-brand-light px-2.5 py-0.5 rounded-full border border-brand-primary/20">
-            {playbackSpeed}x Speed
+          {/* Percentage Completed & Speed Indicator in Middle */}
+          <div className="flex items-center gap-2">
+            <span
+              className="text-[11px] font-bold text-brand-primary font-mono bg-brand-light px-2.5 py-0.5 rounded-full border border-brand-primary/20 shadow-sm"
+              title={`${progressPercent.toFixed(1)}% completed`}
+            >
+              {progressPercent.toFixed(1)}%
+            </span>
+            <div className="text-[11px] text-brand-primary font-sans font-medium bg-brand-light px-2.5 py-0.5 rounded-full border border-brand-primary/20">
+              {playbackSpeed}x Speed
+            </div>
           </div>
 
           {/* Remaining Time (adjusted with playback speed) */}
@@ -224,7 +302,7 @@ export const JuzDisplay: React.FC = () => {
               -{formatAudioTime(adjustedRemainingSeconds)}
             </span>
             <span className="text-[10px] text-content-muted">
-              {playbackSpeed !== 1.0 ? "adjusted left" : "left"}
+              {playbackSpeed !== 1.0 ? "Adjusted for speed" : "left"}
             </span>
           </div>
         </div>

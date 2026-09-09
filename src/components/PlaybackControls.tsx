@@ -9,6 +9,7 @@ import {
   RotateCcw,
   SkipBack,
   SkipForward,
+  RefreshCw,
 } from "lucide-react";
 
 const SPEEDS: PlaybackSpeed[] = [0.5, 1.0, 1.25, 1.5, 1.75, 2.0];
@@ -16,6 +17,8 @@ const SPEEDS: PlaybackSpeed[] = [0.5, 1.0, 1.25, 1.5, 1.75, 2.0];
 export const PlaybackControls: React.FC = () => {
   const {
     isPlaying,
+    isSyncing,
+    syncNotice,
     togglePlay,
     rewind,
     fastForward,
@@ -27,6 +30,14 @@ export const PlaybackControls: React.FC = () => {
 
   return (
     <div className="w-full bg-surface-card border border-surface-border rounded-3xl p-5 backdrop-blur-xl shadow-xl space-y-4 transition-colors duration-200">
+      {/* Device sync notice banner */}
+      {syncNotice && (
+        <div className="text-center text-xs font-medium text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 py-2 px-4 rounded-2xl animate-fadeIn flex items-center justify-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
+          <span>{syncNotice}</span>
+        </div>
+      )}
+
       {/* Main Playback Buttons */}
       <div className="flex items-center justify-center gap-3 sm:gap-6">
         {/* Reset Track Button (Requirement 2.1.2) */}
@@ -53,17 +64,22 @@ export const PlaybackControls: React.FC = () => {
           </span>
         </button>
 
-        {/* Play / Pause Hero Button (Requirement 2.1) */}
+        {/* Play / Pause Hero Button (Requirement 2.1 - with pre-play sync indicator) */}
         <button
           onClick={togglePlay}
-          title={isPlaying ? "Pause Audio" : "Play Audio"}
+          disabled={isSyncing}
+          title={isSyncing ? "Syncing..." : isPlaying ? "Pause Audio" : "Play Audio"}
           style={{
             background: "linear-gradient(135deg, var(--color-primary), var(--color-primary-hover))",
             boxShadow: "0 12px 30px -5px var(--color-primary-glow)",
           }}
-          className="p-5 sm:p-6 rounded-3xl text-white transition duration-200 active:scale-95 hover:brightness-110"
+          className={`p-5 sm:p-6 rounded-3xl text-white transition duration-200 active:scale-95 hover:brightness-110 ${
+            isSyncing ? "opacity-80 cursor-wait" : ""
+          }`}
         >
-          {isPlaying ? (
+          {isSyncing ? (
+            <RefreshCw className="w-8 h-8 animate-spin" />
+          ) : isPlaying ? (
             <Pause className="w-8 h-8 fill-current" />
           ) : (
             <Play className="w-8 h-8 fill-current translate-x-0.5" />

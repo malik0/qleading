@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useApp } from "../context/AppContext";
 import { formatHeroTimer } from "../lib/utils";
-import { TimerMode } from "../types/quran";
 import {
   X,
   Clock,
@@ -11,8 +11,6 @@ import {
   Sliders,
   Check,
   CheckCircle2,
-  ArrowDown,
-  ArrowUp,
   Plus,
   Minus,
 } from "lucide-react";
@@ -28,28 +26,29 @@ export const TimerModal: React.FC<TimerModalProps> = ({ isOpen, onClose }) => {
   const {
     timerSeconds,
     timerTargetMinutes,
-    timerMode,
     isTimerRunning,
     resetTimer,
     adjustTimerDefault,
-    setTimerMode,
   } = useApp();
 
   const [targetMinutes, setTargetMinutes] = useState(timerTargetMinutes);
-  const [selectedMode, setSelectedMode] = useState<TimerMode>(timerMode);
   const [applyToCurrent, setApplyToCurrent] = useState(true);
   const [resetSuccessMessage, setResetSuccessMessage] = useState<string | null>(
     null
   );
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Sync state when modal opens
   useEffect(() => {
     if (isOpen) {
       setTargetMinutes(timerTargetMinutes);
-      setSelectedMode(timerMode);
       setResetSuccessMessage(null);
     }
-  }, [isOpen, timerTargetMinutes, timerMode]);
+  }, [isOpen, timerTargetMinutes]);
 
   // Handle ESC key to close
   useEffect(() => {
@@ -63,17 +62,11 @@ export const TimerModal: React.FC<TimerModalProps> = ({ isOpen, onClose }) => {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, onClose]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
   const handleResetTimer = () => {
     resetTimer();
-    setResetSuccessMessage(
-      `Timer reset to ${
-        timerMode === "countdown"
-          ? `${timerTargetMinutes}:00`
-          : "00:00"
-      }`
-    );
+    setResetSuccessMessage(`Timer reset to ${timerTargetMinutes}:00`);
     setTimeout(() => {
       setResetSuccessMessage(null);
     }, 2500);
@@ -89,20 +82,17 @@ export const TimerModal: React.FC<TimerModalProps> = ({ isOpen, onClose }) => {
 
   const handleSaveAndApply = () => {
     adjustTimerDefault(targetMinutes, applyToCurrent);
-    if (selectedMode !== timerMode) {
-      setTimerMode(selectedMode, applyToCurrent);
-    }
     onClose();
   };
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-fadeIn"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="bg-surface-card border border-surface-border rounded-3xl max-w-lg w-full shadow-2xl overflow-hidden transition-colors duration-200">
+      <div className="bg-surface-card border border-surface-border rounded-3xl max-w-lg w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden transition-colors duration-200">
         {/* Modal Header */}
         <div className="flex items-center justify-between p-5 sm:p-6 border-b border-surface-border">
           <div className="flex items-center gap-2.5">
@@ -114,7 +104,7 @@ export const TimerModal: React.FC<TimerModalProps> = ({ isOpen, onClose }) => {
                 Main Reading Timer
               </h3>
               <p className="text-xs text-content-muted">
-                Adjust default target duration or reset current timer
+                Adjust reading timer duration or reset current timer
               </p>
             </div>
           </div>
@@ -152,13 +142,7 @@ export const TimerModal: React.FC<TimerModalProps> = ({ isOpen, onClose }) => {
             </div>
 
             <p className="text-xs text-content-muted mb-4">
-              Mode:{" "}
-              <strong className="text-content-primary capitalize">
-                {timerMode}
-              </strong>{" "}
-              {timerMode === "countdown"
-                ? `(Target: ${timerTargetMinutes} min)`
-                : `(Counts up to ${timerTargetMinutes} min)`}
+              Target: <strong className="text-content-primary">{timerTargetMinutes} minutes</strong>
             </p>
 
             {/* Reset Button */}
@@ -184,7 +168,7 @@ export const TimerModal: React.FC<TimerModalProps> = ({ isOpen, onClose }) => {
               <div className="flex items-center gap-2">
                 <Sliders className="w-4 h-4 text-brand-primary" />
                 <h4 className="text-sm font-bold text-content-primary">
-                  Default Target Duration
+                  Default Timer Duration
                 </h4>
               </div>
               <span className="text-xs font-mono font-bold text-brand-primary bg-brand-light px-2.5 py-0.5 rounded-lg border border-brand-primary/20">
@@ -255,50 +239,6 @@ export const TimerModal: React.FC<TimerModalProps> = ({ isOpen, onClose }) => {
               </div>
             </div>
 
-            {/* Timer Counting Mode */}
-            <div>
-              <label className="text-xs text-content-muted block mb-2 font-medium">
-                Timer Counting Mode:
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setSelectedMode("countdown")}
-                  className={`p-3 rounded-xl border text-left flex items-start gap-2.5 transition ${
-                    selectedMode === "countdown"
-                      ? "bg-brand-light border-brand-primary text-brand-primary"
-                      : "bg-surface-subtle hover:bg-surface-hover border-surface-border text-content-secondary"
-                  }`}
-                >
-                  <ArrowDown className="w-4 h-4 mt-0.5 shrink-0" />
-                  <div>
-                    <div className="text-xs font-bold">Count Down</div>
-                    <div className="text-[11px] text-content-muted mt-0.5">
-                      Counts down to 00:00
-                    </div>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setSelectedMode("countup")}
-                  className={`p-3 rounded-xl border text-left flex items-start gap-2.5 transition ${
-                    selectedMode === "countup"
-                      ? "bg-brand-light border-brand-primary text-brand-primary"
-                      : "bg-surface-subtle hover:bg-surface-hover border-surface-border text-content-secondary"
-                  }`}
-                >
-                  <ArrowUp className="w-4 h-4 mt-0.5 shrink-0" />
-                  <div>
-                    <div className="text-xs font-bold">Count Up</div>
-                    <div className="text-[11px] text-content-muted mt-0.5">
-                      Counts up to target
-                    </div>
-                  </div>
-                </button>
-              </div>
-            </div>
-
             {/* Checkbox: Apply to active timer now */}
             <label className="flex items-center gap-2.5 p-3 rounded-xl bg-surface-subtle border border-surface-border cursor-pointer select-none">
               <input
@@ -338,7 +278,7 @@ export const TimerModal: React.FC<TimerModalProps> = ({ isOpen, onClose }) => {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
-

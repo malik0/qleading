@@ -53,6 +53,7 @@ export default function Home() {
       <footer className="py-6 border-t border-surface-border text-center text-xs text-content-muted">
         <p>
           Qleading &copy; {new Date().getFullYear()} — Holy Quran 30 Juz Audio Player & Reading Tracker
+          Qleading &copy; {new Date().getFullYear()}
         </p>
       </footer>
 

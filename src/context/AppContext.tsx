@@ -30,6 +30,7 @@ import {
   saveStoredSettings,
   saveStoredState,
   reconcileStates,
+  getDeviceId,
 } from "../lib/storage";
 import { getLocalDateString, getSlotIndexForDate } from "../lib/utils";
 
@@ -81,9 +82,19 @@ interface AppContextType {
   setThemeColor: (color: ThemeColor) => void;
 
   // Streaks & Chart
+  streakTargetMinutes: number;
+  setStreakTargetMinutes: (minutes: number) => void;
   historyRecords: Record<string, DayReadingRecord>;
   todayRecord: DayReadingRecord;
   userLogs: UserLogEntry[];
+
+  // Juz Checklist & Tally
+  completedJuzs: number[];
+  juzTally: number;
+  toggleJuzCompleted: (juzId: number) => void;
+  setJuzTallyManually: (tally: number, completedIds?: number[]) => void;
+  setCompletedStreakDaysManually: (daysCount: number) => void;
+  toggleDayStreakManually: (dateStr: string) => void;
 
   // User Auth & Sync
   userState: UserState;
@@ -103,6 +114,7 @@ interface AppContextType {
   isSyncing: boolean;
   lastSynced: string | null;
   manualSync: () => Promise<void>;
+  syncNotice: string | null;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -111,6 +123,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [userState, setUserState] = useState<UserState>(INITIAL_USER_STATE);
   const [isClient, setIsClient] = useState(false);
+  const [syncNotice, setSyncNotice] = useState<string | null>(null);
+  const broadcastChannelRef = useRef<BroadcastChannel | null>(null);
 
   // Audio state
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -171,6 +185,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     setSettings(loadedSettings);
+    if (loadedSettings.defaultPlaybackSpeed) {
+      setPlaybackSpeedState(loadedSettings.defaultPlaybackSpeed);
+      if (audioRef.current) {
+        audioRef.current.playbackRate = loadedSettings.defaultPlaybackSpeed;
+      }
+    }
     setUserState(loadedState);
     userStateRef.current = loadedState;
     settingsRef.current = loadedSettings;
@@ -224,6 +244,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       saveStoredSettings(next);
       return next;
     });
+    if (partial.defaultPlaybackSpeed !== undefined) {
+      setPlaybackSpeedState(partial.defaultPlaybackSpeed);
+      if (audioRef.current) {
+        audioRef.current.playbackRate = partial.defaultPlaybackSpeed;
+      }
+    }
   }, []);
 
   // Theme Engine & DOM Sync
@@ -321,53 +347,274 @@ export function AppProvider({ children }: { children: ReactNode }) {
     []
   );
 
-  // Unified Sync with Cloudflare D1
-  const syncWithServer = useCallback(async (customState?: UserState) => {
-    const currentState = customState || userStateRef.current;
-    if (!currentState.isLoggedIn) return;
-
-    setIsSyncing(true);
+  // Broadcast playback changes to other tabs in the same browser session
+  const broadcastPlayback = useCallback((type: "PLAY" | "PAUSE", payload?: any) => {
     try {
-      const res = await fetch("/api/sync", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ state: currentState, settings: settingsRef.current }),
+      broadcastChannelRef.current?.postMessage({
+        type,
+        deviceId: getDeviceId(),
+        juzId: userStateRef.current.currentJuzId,
+        position: playbackPosRef.current,
+        ...payload,
       });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.remoteState) {
-          const reconciled = reconcileStates(currentState, data.remoteState);
-          setUserState(reconciled);
-          userStateRef.current = reconciled;
-          saveStoredState(reconciled);
-          if (reconciled.currentJuzId !== currentState.currentJuzId) {
-            setPlaybackPosition(reconciled.playbackPositionSeconds);
-            playbackPosRef.current = reconciled.playbackPositionSeconds;
+    } catch {}
+  }, []);
+
+  // Multi-tab BroadcastChannel listener
+  useEffect(() => {
+    if (typeof window === "undefined" || !("BroadcastChannel" in window)) return;
+    const channel = new BroadcastChannel("qleading_sync_channel");
+    broadcastChannelRef.current = channel;
+
+    channel.onmessage = (event) => {
+      const data = event.data;
+      if (!data || data.deviceId === getDeviceId()) return;
+
+      if (data.type === "PLAY") {
+        // Another tab began playing
+        if (isPlayingRef.current) {
+          audioRef.current?.pause();
+          setIsPlaying(false);
+          isPlayingRef.current = false;
+          setSyncNotice("Playback active in another tab");
+          setTimeout(() => setSyncNotice(null), 5000);
+        }
+        if (data.juzId && data.juzId !== userStateRef.current.currentJuzId) {
+          setUserState((prev) => ({
+            ...prev,
+            currentJuzId: data.juzId,
+            playbackPositionSeconds: data.position || 0,
+          }));
+          if (audioRef.current) {
+            const targetJuz = INITIAL_JUZ_LIST.find((j) => j.id === data.juzId) || INITIAL_JUZ_LIST[0];
+            audioRef.current.src = targetJuz.localAudioUrl;
+            audioRef.current.currentTime = data.position || 0;
           }
         }
         setLastSynced(new Date().toLocaleTimeString());
+        if (data.position !== undefined) {
+          setPlaybackPosition(data.position);
+          playbackPosRef.current = data.position;
+        }
+      } else if (data.type === "PAUSE") {
+        if (data.position !== undefined) {
+          setPlaybackPosition(data.position);
+          playbackPosRef.current = data.position;
+        }
       }
-    } catch (err) {
-      console.warn("Background sync offline/failed:", err);
-    } finally {
-      setIsSyncing(false);
-    }
+    };
+
+    return () => {
+      channel.close();
+    };
   }, []);
 
+  // Unified Sync with Cloudflare D1
+  const syncWithServer = useCallback(
+    async (
+      customState?: UserState,
+      options?: { isStartingPlayback?: boolean; isPlaying?: boolean; action?: string }
+    ) => {
+      const currentState = customState || userStateRef.current;
+      if (!currentState.isLoggedIn) return;
+
+      setIsSyncing(true);
+      try {
+        const res = await fetch("/api/sync", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            state: currentState,
+            settings: settingsRef.current,
+            deviceId: getDeviceId(),
+            isPlaying: options?.isPlaying !== undefined ? options.isPlaying : isPlayingRef.current,
+            isStartingPlayback: options?.isStartingPlayback,
+            action: options?.action,
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.remoteState) {
+            const reconciled = reconcileStates(currentState, data.remoteState);
+            setUserState(reconciled);
+            userStateRef.current = reconciled;
+            saveStoredState(reconciled);
+
+            const targetPos = reconciled.playbackPositionSeconds || 0;
+            const targetJuzId = reconciled.currentJuzId || 1;
+
+            if (targetJuzId !== currentState.currentJuzId) {
+              const targetJuz = INITIAL_JUZ_LIST.find((j) => j.id === targetJuzId) || INITIAL_JUZ_LIST[0];
+              if (audioRef.current && audioRef.current.src !== targetJuz.localAudioUrl) {
+                audioRef.current.src = targetJuz.localAudioUrl;
+              }
+            }
+
+            if (audioRef.current && (!isPlayingRef.current || options?.isStartingPlayback)) {
+              audioRef.current.currentTime = targetPos;
+            }
+            setPlaybackPosition(targetPos);
+            playbackPosRef.current = targetPos;
+          }
+          setLastSynced(new Date().toLocaleTimeString());
+        }
+      } catch (err) {
+        console.warn("Background sync offline/failed:", err);
+      } finally {
+        setIsSyncing(false);
+      }
+    },
+    []
+  );
+
   const manualSync = useCallback(async () => {
-    await syncWithServer();
+    if (userStateRef.current.isLoggedIn) {
+      await syncWithServer();
+    }
+    const targetSec = settingsRef.current.timerTargetMinutes * 60;
+    timerSecondsRef.current = targetSec;
+    const nextState = {
+      ...userStateRef.current,
+      timerSeconds: targetSec,
+      updatedAt: new Date().toISOString(),
+    };
+    userStateRef.current = nextState;
+    saveStoredState(nextState);
+
+    if (typeof window !== "undefined") {
+      window.location.reload();
+    }
   }, [syncWithServer]);
 
-  // Periodic Auto-Sync during active playback (every 20 seconds)
+  // Periodic Heartbeat & Auto-Sync during active playback (every 10 seconds)
   useEffect(() => {
     if (!isPlaying || !userState.isLoggedIn) return;
 
     const interval = setInterval(() => {
-      syncWithServer();
-    }, 20000);
+      fetch("/api/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          state: userStateRef.current,
+          settings: settingsRef.current,
+          deviceId: getDeviceId(),
+          isPlaying: true,
+          action: "heartbeat",
+        }),
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (data?.remoteState) {
+            // Check if server recorded active device switch to another device
+            const myDevId = getDeviceId();
+            if (
+              data.remoteState.activeDeviceId &&
+              data.remoteState.activeDeviceId !== myDevId &&
+              data.remoteState.isPlaying
+            ) {
+              audioRef.current?.pause();
+              setIsPlaying(false);
+              isPlayingRef.current = false;
+              setSyncNotice("Playback active on another device");
+              setTimeout(() => setSyncNotice(null), 6000);
+            }
+          }
+          setLastSynced(new Date().toLocaleTimeString());
+        })
+        .catch(() => {});
+    }, 10000);
 
     return () => clearInterval(interval);
-  }, [isPlaying, userState.isLoggedIn, syncWithServer]);
+  }, [isPlaying, userState.isLoggedIn]);
+
+  // Constant Check (4s Polling & Visibility Changes) to prevent device collision
+  useEffect(() => {
+    if (!userState.isLoggedIn) return;
+
+    const runConstantCheck = async () => {
+      if (isSyncing) return;
+
+      try {
+        const res = await fetch(`/api/sync?userId=${encodeURIComponent(userState.userId)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!data?.state) return;
+
+        const remoteState: UserState = data.state;
+        const myDeviceId = getDeviceId();
+        const isRemotePlaying = Boolean(remoteState.isPlaying);
+        const remoteDeviceId = remoteState.activeDeviceId;
+
+        // Condition A: Another device is actively playing
+        if (isRemotePlaying && remoteDeviceId && remoteDeviceId !== myDeviceId) {
+          if (isPlayingRef.current) {
+            audioRef.current?.pause();
+            setIsPlaying(false);
+            isPlayingRef.current = false;
+            setSyncNotice("Playback active on another device");
+            setTimeout(() => setSyncNotice(null), 6000);
+          }
+
+          const reconciled = reconcileStates(userStateRef.current, remoteState);
+          setUserState(reconciled);
+          userStateRef.current = reconciled;
+          saveStoredState(reconciled);
+
+          if (reconciled.currentJuzId !== userStateRef.current.currentJuzId) {
+            const targetJuz = INITIAL_JUZ_LIST.find((j) => j.id === reconciled.currentJuzId) || INITIAL_JUZ_LIST[0];
+            if (audioRef.current && audioRef.current.src !== targetJuz.localAudioUrl) {
+              audioRef.current.src = targetJuz.localAudioUrl;
+            }
+          }
+          if (audioRef.current && !isPlayingRef.current) {
+            audioRef.current.currentTime = reconciled.playbackPositionSeconds || 0;
+          }
+          setPlaybackPosition(reconciled.playbackPositionSeconds || 0);
+          playbackPosRef.current = reconciled.playbackPositionSeconds || 0;
+          setLastSynced(new Date().toLocaleTimeString());
+        }
+        // Condition B: Local device is paused, pull newer progress from server
+        else if (!isPlayingRef.current) {
+          const remoteTime = new Date(remoteState.updatedAt || 0).getTime();
+          const localTime = new Date(userStateRef.current.updatedAt || 0).getTime();
+
+          if (remoteTime > localTime) {
+            const reconciled = reconcileStates(userStateRef.current, remoteState);
+            setUserState(reconciled);
+            userStateRef.current = reconciled;
+            saveStoredState(reconciled);
+
+            if (reconciled.currentJuzId !== userStateRef.current.currentJuzId) {
+              const targetJuz = INITIAL_JUZ_LIST.find((j) => j.id === reconciled.currentJuzId) || INITIAL_JUZ_LIST[0];
+              if (audioRef.current && audioRef.current.src !== targetJuz.localAudioUrl) {
+                audioRef.current.src = targetJuz.localAudioUrl;
+              }
+            }
+            if (audioRef.current) {
+              audioRef.current.currentTime = reconciled.playbackPositionSeconds || 0;
+            }
+            setPlaybackPosition(reconciled.playbackPositionSeconds || 0);
+            playbackPosRef.current = reconciled.playbackPositionSeconds || 0;
+            setLastSynced(new Date().toLocaleTimeString());
+          }
+        }
+      } catch {}
+    };
+
+    const interval = setInterval(runConstantCheck, 4000);
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        runConstantCheck();
+      }
+    };
+    window.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [userState.isLoggedIn, userState.userId, isSyncing]);
 
   // Tab switch / page hide auto-sync
   useEffect(() => {
@@ -383,15 +630,68 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("visibilitychange", handleVisibilityChange);
   }, [syncWithServer]);
 
-  // Audio Playback Controls
-  const play = useCallback(() => {
-    if (audioRef.current) {
-      audioRef.current
-        .play()
-        .then(() => setIsPlaying(true))
-        .catch((e) => console.warn("Playback error:", e));
+  // Audio Playback Controls with Pre-Play Sync
+  const play = useCallback(async () => {
+    if (!audioRef.current) return;
+
+    // Requirement: When play button is pressed a sync must be done first!
+    if (userStateRef.current.isLoggedIn) {
+      setIsSyncing(true);
+      try {
+        const currentState = userStateRef.current;
+        const res = await fetch("/api/sync", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            state: currentState,
+            settings: settingsRef.current,
+            deviceId: getDeviceId(),
+            isPlaying: true,
+            isStartingPlayback: true,
+          }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data.remoteState) {
+            const reconciled = reconcileStates(currentState, data.remoteState);
+            setUserState(reconciled);
+            userStateRef.current = reconciled;
+            saveStoredState(reconciled);
+
+            const targetPos = reconciled.playbackPositionSeconds || 0;
+            const targetJuzId = reconciled.currentJuzId || 1;
+
+            if (targetJuzId !== currentState.currentJuzId) {
+              const targetJuz = INITIAL_JUZ_LIST.find((j) => j.id === targetJuzId) || INITIAL_JUZ_LIST[0];
+              if (audioRef.current.src !== targetJuz.localAudioUrl) {
+                audioRef.current.src = targetJuz.localAudioUrl;
+              }
+            }
+
+            audioRef.current.currentTime = targetPos;
+            setPlaybackPosition(targetPos);
+            playbackPosRef.current = targetPos;
+            setLastSynced(new Date().toLocaleTimeString());
+          }
+        }
+      } catch (err) {
+        console.warn("Pre-play sync offline/failed, continuing locally:", err);
+      } finally {
+        setIsSyncing(false);
+      }
     }
-  }, []);
+
+    try {
+      await audioRef.current.play();
+      setIsPlaying(true);
+      isPlayingRef.current = true;
+      setSyncNotice(null);
+      broadcastPlayback("PLAY");
+    } catch (e) {
+      console.warn("Playback error:", e);
+    }
+  }, [broadcastPlayback]);
 
   const pause = useCallback(() => {
     if (audioRef.current) {
@@ -401,8 +701,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setTimeout(() => {
         syncWithServer();
       }, 50);
+      isPlayingRef.current = false;
+      broadcastPlayback("PAUSE");
+
+      // Immediately sync pause state to server
+      if (userStateRef.current.isLoggedIn) {
+        fetch("/api/sync", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            state: userStateRef.current,
+            settings: settingsRef.current,
+            deviceId: getDeviceId(),
+            isPlaying: false,
+            action: "pause",
+          }),
+        }).catch(() => {});
+      }
     }
-  }, [syncWithServer]);
+  }, [syncWithServer, broadcastPlayback]);
 
   const togglePlay = useCallback(() => {
     if (isPlaying) {
@@ -489,22 +806,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const resetTimer = useCallback(() => {
-    const targetSec =
-      settings.timerMode === "countdown" ? settings.timerTargetMinutes * 60 : 0;
+    const targetSec = settings.timerTargetMinutes * 60;
     timerSecondsRef.current = targetSec;
     updateStateAndPersist((prev) => ({
       ...prev,
       timerSeconds: targetSec,
     }));
-  }, [settings.timerMode, settings.timerTargetMinutes, updateStateAndPersist]);
+  }, [settings.timerTargetMinutes, updateStateAndPersist]);
 
   const adjustTimerDefault = useCallback(
     (targetMinutes: number, resetCurrent: boolean = true) => {
       const validMinutes = Math.max(1, Math.min(720, Math.round(targetMinutes)));
       updateSettings({ timerTargetMinutes: validMinutes });
       if (resetCurrent) {
-        const targetSec =
-          settings.timerMode === "countdown" ? validMinutes * 60 : 0;
+        const targetSec = validMinutes * 60;
         timerSecondsRef.current = targetSec;
         updateStateAndPersist((prev) => ({
           ...prev,
@@ -512,15 +827,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }));
       }
     },
-    [settings.timerMode, updateSettings, updateStateAndPersist]
+    [updateSettings, updateStateAndPersist]
   );
 
   const setTimerMode = useCallback(
-    (mode: TimerMode, resetCurrent: boolean = false) => {
-      updateSettings({ timerMode: mode });
+    (_mode: TimerMode, resetCurrent: boolean = false) => {
+      updateSettings({ timerMode: "countdown" });
       if (resetCurrent) {
-        const targetSec =
-          mode === "countdown" ? settings.timerTargetMinutes * 60 : 0;
+        const targetSec = settings.timerTargetMinutes * 60;
         timerSecondsRef.current = targetSec;
         updateStateAndPersist((prev) => ({
           ...prev,
@@ -529,6 +843,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
     },
     [settings.timerTargetMinutes, updateSettings, updateStateAndPersist]
+  );
+
+  const setStreakTargetMinutes = useCallback(
+    (minutes: number) => {
+      const validMinutes = Math.max(1, Math.min(720, Math.round(minutes)));
+      updateSettings({ streakTargetMinutes: validMinutes });
+      updateStateAndPersist((prev) => ({
+        ...prev,
+        streakTargetMinutes: validMinutes,
+      }));
+    },
+    [updateSettings, updateStateAndPersist]
   );
 
   // 1-Second Master Tick:
@@ -559,19 +885,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
 
       // Timer update:
-      // In countdown mode: decreases until 0
-      // In countup mode: increases until target reached
+      // Decrements by 1 every second while audio plays.
+      // When reaching 0 and beyond, it continues into negative seconds (-1, -2, -3...),
+      // which formatHeroTimer formats with '+' and counts upwards in overtime.
       const targetSec = settings.timerTargetMinutes * 60;
+      const streakTargetSec =
+        (settings.streakTargetMinutes || settings.timerTargetMinutes || 30) * 60;
       let nextTimerSec = timerSecondsRef.current;
 
       if (isNewDay) {
-        nextTimerSec = settings.timerMode === "countdown" ? targetSec : 0;
+        nextTimerSec = targetSec;
       } else {
-        if (settings.timerMode === "countdown") {
-          nextTimerSec = Math.max(0, nextTimerSec - 1);
-        } else {
-          nextTimerSec = nextTimerSec + 1;
-        }
+        nextTimerSec = nextTimerSec - 1;
       }
       timerSecondsRef.current = nextTimerSec;
 
@@ -589,7 +914,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const currentSlotSec = (existingToday.slots[currentSlot] || 0) + 1;
         const slots = { ...existingToday.slots, [currentSlot]: currentSlotSec };
 
-        const targetCompleted = updatedSecondsRead >= targetSec;
+        const targetCompleted = updatedSecondsRead >= streakTargetSec;
 
         history[todayStr] = {
           date: todayStr,
@@ -609,7 +934,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [settings.timerMode, settings.timerTargetMinutes, updateStateAndPersist]);
+  }, [settings.timerMode, settings.timerTargetMinutes, settings.streakTargetMinutes, updateStateAndPersist]);
 
   // Audio Ended Handler: Automatic Playlist Continuous Playback
   const handleAudioEnded = useCallback(() => {
@@ -628,11 +953,208 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ...s,
       userLogs: [logEntry, ...(s.userLogs || [])].slice(0, 500),
     }));
+    // Requirement: When an audio file reaches the end it will update the Big Timer
+    // to the default amount or the AutoTimer setting when it moves on to the next file.
+    const autoMinutes =
+      settings.autoTimerDurationMinutes ?? settings.timerTargetMinutes ?? 30;
+    const resetTimerSec =
+      settings.timerMode === "countdown" ? autoMinutes * 60 : 0;
+    timerSecondsRef.current = resetTimerSec;
+
+    // Requirement: Whenever an audio file reaches the end a Juz tally is updated.
+    // This is what is used to update the 30 day percentage streak.
+    const todayStr = getLocalDateString();
+    const completedJuzId = currentJuz.id;
+
+    updateStateAndPersist((s) => {
+      const currentCompleted = s.completedJuzs || [];
+      const nextCompleted = currentCompleted.includes(completedJuzId)
+        ? currentCompleted
+        : [...currentCompleted, completedJuzId].sort((a, b) => a - b);
+      const nextTally = (s.juzTally || 0) + 1;
+
+      const history = { ...s.historyRecords };
+      const existingToday = history[todayStr] || {
+        date: todayStr,
+        secondsRead: 0,
+        targetReached: false,
+        slots: {},
+        juzCompletedCount: 0,
+        completedJuzIds: [],
+      };
+
+      const existingJuzIds = existingToday.completedJuzIds || [];
+      const nextTodayCompletedJuzIds = [...existingJuzIds, completedJuzId];
+      const nextTodayJuzCount = (existingToday.juzCompletedCount || 0) + 1;
+
+      history[todayStr] = {
+        ...existingToday,
+        targetReached: true, // Completing a Juz fulfills the streak for the day
+        juzCompletedCount: nextTodayJuzCount,
+        completedJuzIds: nextTodayCompletedJuzIds,
+      };
+
+      return {
+        ...s,
+        timerSeconds: resetTimerSec,
+        completedJuzs: nextCompleted,
+        juzTally: nextTally,
+        historyRecords: history,
+        userLogs: [logEntry, ...(s.userLogs || [])].slice(0, 500),
+      };
+    });
 
     // Transition to next Juz seamlessly
     const nextJuzId = currentJuz.id < 30 ? currentJuz.id + 1 : 1;
     confirmJuzSwitch(nextJuzId);
-  }, [currentJuz.id, juzName, playbackPosition, playbackSpeed, updateStateAndPersist, confirmJuzSwitch]);
+  }, [
+    currentJuz.id,
+    juzName,
+    playbackPosition,
+    playbackSpeed,
+    settings.autoTimerDurationMinutes,
+    settings.timerTargetMinutes,
+    updateStateAndPersist,
+    confirmJuzSwitch,
+  ]);
+
+  // Juz Checklist: Tap to mark done or undone
+  const toggleJuzCompleted = useCallback(
+    (juzId: number) => {
+      const todayStr = getLocalDateString();
+      updateStateAndPersist((s) => {
+        const currentCompleted = s.completedJuzs || [];
+        const isDone = currentCompleted.includes(juzId);
+        let nextCompleted: number[];
+        let nextTally: number;
+
+        const history = { ...s.historyRecords };
+        const existingToday = history[todayStr] || {
+          date: todayStr,
+          secondsRead: 0,
+          targetReached: false,
+          slots: {},
+          juzCompletedCount: 0,
+          completedJuzIds: [],
+        };
+
+        if (isDone) {
+          nextCompleted = currentCompleted.filter((id) => id !== juzId);
+          nextTally = Math.max(0, (s.juzTally || 1) - 1);
+
+          const filteredTodayIds = (existingToday.completedJuzIds || []).filter(
+            (id) => id !== juzId
+          );
+          history[todayStr] = {
+            ...existingToday,
+            completedJuzIds: filteredTodayIds,
+            juzCompletedCount: Math.max(0, (existingToday.juzCompletedCount || 1) - 1),
+          };
+        } else {
+          nextCompleted = [...currentCompleted, juzId].sort((a, b) => a - b);
+          nextTally = (s.juzTally || 0) + 1;
+
+          const nextTodayIds = [...(existingToday.completedJuzIds || []), juzId];
+          history[todayStr] = {
+            ...existingToday,
+            targetReached: true,
+            completedJuzIds: nextTodayIds,
+            juzCompletedCount: (existingToday.juzCompletedCount || 0) + 1,
+          };
+        }
+
+        return {
+          ...s,
+          completedJuzs: nextCompleted,
+          juzTally: nextTally,
+          historyRecords: history,
+        };
+      });
+      syncWithServer();
+    },
+    [updateStateAndPersist, syncWithServer]
+  );
+
+  // Manual Adjustments in Settings
+  const setJuzTallyManually = useCallback(
+    (tally: number, completedIds?: number[]) => {
+      const validTally = Math.max(0, Math.round(tally));
+      updateStateAndPersist((s) => ({
+        ...s,
+        juzTally: validTally,
+        ...(completedIds ? { completedJuzs: completedIds } : {}),
+      }));
+      syncWithServer();
+    },
+    [updateStateAndPersist, syncWithServer]
+  );
+
+  const setCompletedStreakDaysManually = useCallback(
+    (daysCount: number) => {
+      const clampedDays = Math.max(0, Math.min(30, Math.round(daysCount)));
+      const today = new Date();
+      updateStateAndPersist((s) => {
+        const history = { ...s.historyRecords };
+        for (let i = 0; i < 30; i++) {
+          const d = new Date(today);
+          d.setDate(today.getDate() - i);
+          const dStr = getLocalDateString(d);
+          const existing = history[dStr] || {
+            date: dStr,
+            secondsRead: 0,
+            targetReached: false,
+            slots: {},
+            juzCompletedCount: 0,
+            completedJuzIds: [],
+          };
+          const shouldBeCompleted = i < clampedDays;
+          history[dStr] = {
+            ...existing,
+            targetReached: shouldBeCompleted,
+            juzCompletedCount: shouldBeCompleted
+              ? Math.max(1, existing.juzCompletedCount || 1)
+              : 0,
+          };
+        }
+        return {
+          ...s,
+          historyRecords: history,
+        };
+      });
+      syncWithServer();
+    },
+    [updateStateAndPersist, syncWithServer]
+  );
+
+  const toggleDayStreakManually = useCallback(
+    (dateStr: string) => {
+      updateStateAndPersist((s) => {
+        const history = { ...s.historyRecords };
+        const existing = history[dateStr] || {
+          date: dateStr,
+          secondsRead: 0,
+          targetReached: false,
+          slots: {},
+          juzCompletedCount: 0,
+          completedJuzIds: [],
+        };
+        const nextCompleted = !existing.targetReached;
+        history[dateStr] = {
+          ...existing,
+          targetReached: nextCompleted,
+          juzCompletedCount: nextCompleted
+            ? Math.max(1, existing.juzCompletedCount || 1)
+            : 0,
+        };
+        return {
+          ...s,
+          historyRecords: history,
+        };
+      });
+      syncWithServer();
+    },
+    [updateStateAndPersist, syncWithServer]
+  );
 
   // MediaSession API Integration (Lock Screen, Notification, Headphone buttons)
   useEffect(() => {
@@ -874,7 +1396,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setThemeColor,
         historyRecords: userState.historyRecords,
         todayRecord,
+        streakTargetMinutes: settings.streakTargetMinutes ?? settings.timerTargetMinutes ?? 30,
+        setStreakTargetMinutes,
         userLogs: userState.userLogs || [],
+        completedJuzs: userState.completedJuzs || [],
+        juzTally: userState.juzTally ?? (userState.completedJuzs ? userState.completedJuzs.length : 0),
+        toggleJuzCompleted,
+        setJuzTallyManually,
+        setCompletedStreakDaysManually,
+        toggleDayStreakManually,
         userState,
         loginUser,
         registerUser,
@@ -884,6 +1414,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         isSyncing,
         lastSynced,
         manualSync,
+        syncNotice,
       }}
     >
       {/* Underlying Audio Element with CDN Fallback Error Handling */}
@@ -899,6 +1430,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
           const d = e.currentTarget.duration;
           if (d && !isNaN(d) && isFinite(d)) {
             setDuration(d);
+          }
+          if (playbackSpeed) {
+            e.currentTarget.playbackRate = playbackSpeed;
           }
           // Restore position if loading fresh
           if (playbackPosition > 0 && Math.abs(e.currentTarget.currentTime - playbackPosition) > 2) {

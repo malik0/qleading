@@ -6,23 +6,25 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 /**
- * Requirement 1.4:
- * Shows hours, minutes & seconds: but if it’s less than an hour it should hide the hour part.
- * Don’t hide the minutes if it’s less than a minute (use 00: instead).
+ * Requirement 1.4 & Overtime:
+ * Shows hours, minutes & seconds: but if it’s less than an hour it hides the hour part.
+ * If the timer completes and counts upwards (totalSeconds < 0), prepends '+' to the formatted time.
  */
 export function formatHeroTimer(totalSeconds: number): string {
-  const sec = Math.max(0, Math.floor(totalSeconds));
+  const isOvertime = totalSeconds < 0;
+  const sec = Math.abs(Math.floor(totalSeconds));
   const hours = Math.floor(sec / 3600);
   const minutes = Math.floor((sec % 3600) / 60);
   const seconds = sec % 60;
 
   const pad = (n: number) => String(n).padStart(2, "0");
 
-  if (hours > 0) {
-    return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
-  }
-  // Less than an hour -> hide hours, show MM:SS (even if minutes is 0, shows 00:SS)
-  return `${pad(minutes)}:${pad(seconds)}`;
+  const formatted =
+    hours > 0
+      ? `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`
+      : `${pad(minutes)}:${pad(seconds)}`;
+
+  return isOvertime ? `+${formatted}` : formatted;
 }
 
 /**
@@ -69,4 +71,3 @@ export function formatSlotTime(slotIndex: number): string {
   const min = (slotIndex % 4) * 15;
   return `${String(hour).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
 }
-

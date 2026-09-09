@@ -75,6 +75,8 @@ function rowToUserState(row: any, user: { id: string; username: string; email: s
     updatedAt: row?.updated_at || new Date().toISOString(),
     historyRecords,
     userLogs,
+    activeDeviceId: row?.active_device_id || undefined,
+    isPlaying: Boolean(row?.is_playing),
   };
 }
 

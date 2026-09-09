@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { useApp } from "../context/AppContext";
-import { DayOfWeek, ThemeColor, ThemeMode, TimerMode } from "../types/quran";
+import { DayOfWeek, PlaybackSpeed, ThemeColor, ThemeMode, TimerMode } from "../types/quran";
 import {
   X,
   Sliders,
@@ -17,7 +17,16 @@ import {
   Monitor,
   Sparkles,
   Play,
+  Gauge,
+  Download,
+  Flame,
+  Trophy,
+  CheckCircle2,
+  ListChecks,
+  Minus,
+  Plus,
 } from "lucide-react";
+import { MediaDownloadsList } from "./MediaDownloadsList";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -212,15 +221,62 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     resolvedTheme,
     setThemeMode,
     setThemeColor,
+    completedJuzs,
+    juzTally,
+    setJuzTallyManually,
+    setCompletedStreakDaysManually,
+    historyRecords,
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState<"themes" | "general" | "juz">("themes");
+  const [activeTab, setActiveTab] = useState<
+    "themes" | "general" | "progress" | "juz" | "media"
+  >("themes");
   const [selectedCategory, setSelectedCategory] = useState<ThemeCategory>("all");
 
   // Local state for Juz editor
   const [selectedJuzEdit, setSelectedJuzEdit] = useState<number>(1);
   const [customNameInput, setCustomNameInput] = useState<string>("");
   const [customRangeInput, setCustomRangeInput] = useState<string>("");
+
+  // Local state for Manual Tally and Streak adjustments
+  const [manualTallyInput, setManualTallyInput] = useState<number>(juzTally || 0);
+  const [manualCompletedJuzs, setManualCompletedJuzs] = useState<number[]>(completedJuzs || []);
+  const [manualStreakDays, setManualStreakDays] = useState<number>(() => {
+    let count = 0;
+    const today = new Date();
+    for (let i = 0; i < 30; i++) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      const ds = d.toLocaleDateString("en-CA"); // YYYY-MM-DD
+      const r = historyRecords[ds];
+      if (r && (r.targetReached || (r.juzCompletedCount && r.juzCompletedCount > 0))) {
+        count++;
+      }
+    }
+    return count;
+  });
+  const [progressSaveNotice, setProgressSaveNotice] = useState<string | null>(null);
+
+  // Sync state when modal opens
+  React.useEffect(() => {
+    if (isOpen) {
+      setManualTallyInput(juzTally || 0);
+      setManualCompletedJuzs(completedJuzs || []);
+      let count = 0;
+      const today = new Date();
+      for (let i = 0; i < 30; i++) {
+        const d = new Date(today);
+        d.setDate(today.getDate() - i);
+        const ds = d.toLocaleDateString("en-CA");
+        const r = historyRecords[ds];
+        if (r && (r.targetReached || (r.juzCompletedCount && r.juzCompletedCount > 0))) {
+          count++;
+        }
+      }
+      setManualStreakDays(count);
+      setProgressSaveNotice(null);
+    }
+  }, [isOpen, juzTally, completedJuzs, historyRecords]);
 
   if (!isOpen) return null;
 
@@ -292,41 +348,65 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         </div>
 
         {/* Tab Switcher */}
-        <div className="flex border-b border-surface-border px-4 sm:px-6 bg-surface-subtle/50 overflow-x-auto">
-          <button
-            onClick={() => setActiveTab("themes")}
-            className={`py-3 px-3 sm:px-4 text-sm font-semibold border-b-2 transition flex items-center gap-2 whitespace-nowrap ${
-              activeTab === "themes"
-                ? "border-brand-primary text-brand-primary"
-                : "border-transparent text-content-muted hover:text-content-primary"
-            }`}
-          >
-            <Palette className="w-4 h-4" />
-            Color Themes
-          </button>
-          <button
-            onClick={() => setActiveTab("general")}
-            className={`py-3 px-3 sm:px-4 text-sm font-semibold border-b-2 transition whitespace-nowrap ${
-              activeTab === "general"
-                ? "border-brand-primary text-brand-primary"
-                : "border-transparent text-content-muted hover:text-content-primary"
-            }`}
-          >
-            General & Playback
-          </button>
-          <button
-            onClick={() => {
-              setActiveTab("juz");
-              handleSelectJuzToEdit(selectedJuzEdit);
-            }}
-            className={`py-3 px-3 sm:px-4 text-sm font-semibold border-b-2 transition whitespace-nowrap ${
-              activeTab === "juz"
-                ? "border-brand-primary text-brand-primary"
-                : "border-transparent text-content-muted hover:text-content-primary"
-            }`}
-          >
-            Customize 30 Juzs
-          </button>
+        <div className="border-b border-surface-border px-4 sm:px-6 py-3 bg-surface-subtle/40 overflow-x-auto">
+          <div className="flex items-center gap-2 sm:gap-2.5 min-w-max">
+            <button
+              onClick={() => setActiveTab("themes")}
+              className={`py-2 px-3.5 sm:px-4 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 whitespace-nowrap ${
+                activeTab === "themes"
+                  ? "bg-brand-primary text-white shadow-sm font-bold"
+                  : "bg-surface-card hover:bg-surface-hover text-content-secondary hover:text-content-primary border border-surface-border"
+              }`}
+            >
+              <Palette className="w-4 h-4" />
+              <span>Color Themes</span>
+            </button>
+            <button
+              onClick={() => setActiveTab("general")}
+              className={`py-2 px-3.5 sm:px-4 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap ${
+                activeTab === "general"
+                  ? "bg-brand-primary text-white shadow-sm font-bold"
+                  : "bg-surface-card hover:bg-surface-hover text-content-secondary hover:text-content-primary border border-surface-border"
+              }`}
+            >
+              <span>General & Playback</span>
+            </button>
+            <button
+              onClick={() => setActiveTab("progress")}
+              className={`py-2 px-3.5 sm:px-4 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 whitespace-nowrap ${
+                activeTab === "progress"
+                  ? "bg-brand-primary text-white shadow-sm font-bold"
+                  : "bg-surface-card hover:bg-surface-hover text-content-secondary hover:text-content-primary border border-surface-border"
+              }`}
+            >
+              <Trophy className="w-4 h-4" />
+              <span>Tally & Streaks</span>
+            </button>
+            <button
+              onClick={() => {
+                setActiveTab("juz");
+                handleSelectJuzToEdit(selectedJuzEdit);
+              }}
+              className={`py-2 px-3.5 sm:px-4 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap ${
+                activeTab === "juz"
+                  ? "bg-brand-primary text-white shadow-sm font-bold"
+                  : "bg-surface-card hover:bg-surface-hover text-content-secondary hover:text-content-primary border border-surface-border"
+              }`}
+            >
+              <span>Customize 30 Juzs</span>
+            </button>
+            <button
+              onClick={() => setActiveTab("media")}
+              className={`py-2 px-3.5 sm:px-4 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 whitespace-nowrap ${
+                activeTab === "media"
+                  ? "bg-brand-primary text-white shadow-sm font-bold"
+                  : "bg-surface-card hover:bg-surface-hover text-content-secondary hover:text-content-primary border border-surface-border"
+              }`}
+            >
+              <Download className="w-4 h-4" />
+              <span>Media downloads</span>
+            </button>
+          </div>
         </div>
 
         {/* Content Body */}
@@ -646,16 +726,44 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               </div>
 
-              {/* 3.3 Timer Duration & Mode */}
+              {/* Default Playback Speed */}
+              <div className="space-y-3 pt-4 border-t border-surface-border">
+                <h4 className="text-sm font-semibold text-content-primary flex items-center gap-2">
+                  <Gauge className="w-4 h-4 text-brand-primary" />
+                  Default Playback Speed
+                </h4>
+                <div>
+                  <label className="text-xs text-content-muted block mb-1.5 font-medium">
+                    Starting playback speed when audio begins:
+                  </label>
+                  <select
+                    value={settings.defaultPlaybackSpeed ?? 1.0}
+                    onChange={(e) => {
+                      const speed = parseFloat(e.target.value) as PlaybackSpeed;
+                      updateSettings({ defaultPlaybackSpeed: speed });
+                    }}
+                    className="w-full bg-surface-subtle border border-surface-border rounded-xl px-3 py-2 text-sm text-content-primary focus:outline-none focus:border-brand-primary font-mono"
+                  >
+                    <option value={0.5}>0.5x (Slow)</option>
+                    <option value={1.0}>1.0x (Normal - Default)</option>
+                    <option value={1.25}>1.25x</option>
+                    <option value={1.5}>1.5x</option>
+                    <option value={1.75}>1.75x</option>
+                    <option value={2.0}>2.0x (Fast)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* 3.3 Playback Reading Timer */}
               <div className="space-y-3 pt-4 border-t border-surface-border">
                 <h4 className="text-sm font-semibold text-content-primary flex items-center gap-2">
                   <Clock className="w-4 h-4 text-brand-primary" />
-                  Daily Reading Timer Target
+                  Playback Reading Timer
                 </h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="text-xs text-content-muted block mb-1.5 font-medium">
-                      Target Duration (Minutes)
+                      Default Timer Duration (Minutes)
                     </label>
                     <input
                       type="number"
@@ -670,50 +778,87 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       className="w-full bg-surface-subtle border border-surface-border rounded-xl px-3 py-2 text-sm text-content-primary focus:outline-none focus:border-brand-primary font-mono"
                     />
                   </div>
-                  <div>
-                    <label className="text-xs text-content-muted block mb-1.5 font-medium">
-                      Timer Counting Mode
-                    </label>
-                    <select
-                      value={settings.timerMode}
+                </div>
+
+                {/* AutoTimer Setting on Next Track */}
+                <div className="pt-2">
+                  <label className="text-xs text-content-muted block mb-1.5 font-medium">
+                    AutoTimer Setting on Next Track (Minutes)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={1}
+                      max={720}
+                      value={settings.autoTimerDurationMinutes ?? settings.timerTargetMinutes}
                       onChange={(e) =>
                         updateSettings({
-                          timerMode: e.target.value as TimerMode,
+                          autoTimerDurationMinutes: Math.max(1, parseInt(e.target.value, 10) || 30),
+                        })
+                      }
+                      className="w-full bg-surface-subtle border border-surface-border rounded-xl px-3 py-2 text-sm text-content-primary focus:outline-none focus:border-brand-primary font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateSettings({
+                          autoTimerDurationMinutes: settings.timerTargetMinutes,
+                        })
+                      }
+                      className="shrink-0 px-3 py-2 rounded-xl bg-surface-subtle hover:bg-surface-hover text-xs font-semibold text-content-secondary border border-surface-border transition cursor-pointer"
+                    >
+                      Match Default
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-content-muted mt-1">
+                    When an audio file finishes, the Big Timer will automatically reset to this duration as it moves on to the next Juz.
+                  </p>
+                </div>
+              </div>
+
+              {/* 4.2 Daily Streak Habit Goal & Start Day */}
+              <div className="space-y-3 pt-4 border-t border-surface-border">
+                <h4 className="text-sm font-semibold text-content-primary flex items-center gap-2">
+                  <Flame className="w-4 h-4 text-brand-primary" />
+                  Daily Streak Habit Goal
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs text-content-muted block mb-1.5 font-medium">
+                      Daily Streak Target (Minutes)
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={720}
+                      value={settings.streakTargetMinutes ?? settings.timerTargetMinutes ?? 30}
+                      onChange={(e) =>
+                        updateSettings({
+                          streakTargetMinutes: Math.max(1, parseInt(e.target.value, 10) || 30),
+                        })
+                      }
+                      className="w-full bg-surface-subtle border border-surface-border rounded-xl px-3 py-2 text-sm text-content-primary focus:outline-none focus:border-brand-primary font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-content-muted block mb-1.5 font-medium">
+                      Weekly Streak Start Day
+                    </label>
+                    <select
+                      value={settings.streakStartDay}
+                      onChange={(e) =>
+                        updateSettings({
+                          streakStartDay: parseInt(e.target.value, 10) as DayOfWeek,
                         })
                       }
                       className="w-full bg-surface-subtle border border-surface-border rounded-xl px-3 py-2 text-sm text-content-primary focus:outline-none focus:border-brand-primary"
                     >
-                      <option value="countdown">Count Down (to 00:00)</option>
-                      <option value="countup">Count Up (to target)</option>
+                      <option value={1}>Monday (Default)</option>
+                      <option value={0}>Sunday</option>
+                      <option value={6}>Saturday</option>
+                      <option value={5}>Friday</option>
                     </select>
                   </div>
-                </div>
-              </div>
-
-              {/* 4.2 Streak Start Day */}
-              <div className="space-y-3 pt-4 border-t border-surface-border">
-                <h4 className="text-sm font-semibold text-content-primary flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-brand-primary" />
-                  Streak Counter Weekly Start Day
-                </h4>
-                <div>
-                  <label className="text-xs text-content-muted block mb-1.5 font-medium">
-                    Weekly view moves forward starting from:
-                  </label>
-                  <select
-                    value={settings.streakStartDay}
-                    onChange={(e) =>
-                      updateSettings({
-                        streakStartDay: parseInt(e.target.value, 10) as DayOfWeek,
-                      })
-                    }
-                    className="w-full bg-surface-subtle border border-surface-border rounded-xl px-3 py-2 text-sm text-content-primary focus:outline-none focus:border-brand-primary"
-                  >
-                    <option value={1}>Monday (Default)</option>
-                    <option value={0}>Sunday</option>
-                    <option value={6}>Saturday</option>
-                    <option value={5}>Friday</option>
-                  </select>
                 </div>
               </div>
 
@@ -748,6 +893,202 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           )}
 
           {/* TAB 3: CUSTOMIZE JUZ NAMES AND RANGES */}
+          {/* TAB 3: TALLY & STREAKS PROGRESS ADJUSTER */}
+          {activeTab === "progress" && (
+            <div className="space-y-6 animate-fadeIn">
+              {/* Header Info */}
+              <div className="space-y-1">
+                <h4 className="text-sm font-bold text-content-primary flex items-center gap-2">
+                  <Trophy className="w-4 h-4 text-brand-primary" />
+                  Manual Juz Tally & Streak Adjustments
+                </h4>
+                <p className="text-xs text-content-muted">
+                  Manually adjust completed Juzes, total tally, and past 30-day streak count.
+                </p>
+              </div>
+
+              {/* Section 1: Total Juz Tally */}
+              <div className="p-4 rounded-2xl bg-surface-subtle/60 border border-surface-border space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-sm font-bold text-content-primary block">
+                      Total Juz Tally
+                    </span>
+                    <span className="text-xs text-content-muted">
+                      Number of completed Juz recitations tracked overall
+                    </span>
+                  </div>
+                  <span className="text-sm font-mono font-bold text-brand-primary bg-brand-light px-3 py-1 rounded-xl border border-brand-primary/20">
+                    {manualTallyInput} Completed
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setManualTallyInput((prev) => Math.max(0, prev - 1))}
+                    title="Decrease tally by 1"
+                    className="p-2.5 rounded-xl bg-surface-card hover:bg-surface-hover border border-surface-border text-content-secondary hover:text-content-primary transition cursor-pointer"
+                  >
+                    <Minus className="w-4 h-4" />
+                  </button>
+                  <input
+                    type="number"
+                    min={0}
+                    max={9999}
+                    value={manualTallyInput}
+                    onChange={(e) =>
+                      setManualTallyInput(Math.max(0, parseInt(e.target.value, 10) || 0))
+                    }
+                    className="flex-1 bg-surface-card border border-surface-border rounded-xl px-3 py-2 text-center text-base font-mono font-bold text-content-primary focus:outline-none focus:border-brand-primary"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setManualTallyInput((prev) => prev + 1)}
+                    title="Increase tally by 1"
+                    className="p-2.5 rounded-xl bg-surface-card hover:bg-surface-hover border border-surface-border text-content-secondary hover:text-content-primary transition cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Section 2: 30 Juz Checklist Completion */}
+              <div className="p-4 rounded-2xl bg-surface-subtle/60 border border-surface-border space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-sm font-bold text-content-primary block">
+                      30 Juz Checklist Status
+                    </span>
+                    <span className="text-xs text-content-muted">
+                      Select which of the 30 Juzes are marked done ({manualCompletedJuzs.length}/30)
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const all30 = Array.from({ length: 30 }, (_, i) => i + 1);
+                        setManualCompletedJuzs(all30);
+                        setManualTallyInput((prev) => Math.max(prev, 30));
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-surface-card hover:bg-surface-hover text-[11px] font-semibold text-brand-primary border border-surface-border transition cursor-pointer"
+                    >
+                      Check All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setManualCompletedJuzs([])}
+                      className="px-2.5 py-1 rounded-lg bg-surface-card hover:bg-surface-hover text-[11px] font-semibold text-content-muted hover:text-content-primary border border-surface-border transition cursor-pointer"
+                    >
+                      Clear All
+                    </button>
+                  </div>
+                </div>
+
+                {/* Grid of 30 Juzes */}
+                <div className="grid grid-cols-5 sm:grid-cols-6 md:grid-cols-10 gap-1.5 pt-1">
+                  {Array.from({ length: 30 }, (_, i) => i + 1).map((juzId) => {
+                    const isChecked = manualCompletedJuzs.includes(juzId);
+                    return (
+                      <button
+                        type="button"
+                        key={juzId}
+                        onClick={() => {
+                          setManualCompletedJuzs((prev) => {
+                            const next = isChecked
+                              ? prev.filter((id) => id !== juzId)
+                              : [...prev, juzId].sort((a, b) => a - b);
+                            return next;
+                          });
+                        }}
+                        title={`Juz ${juzId}: ${isChecked ? "Done (click to unmark)" : "Not done (click to mark)"}`}
+                        className={`h-9 rounded-xl flex items-center justify-center text-xs font-bold font-mono transition-all cursor-pointer border ${
+                          isChecked
+                            ? "bg-brand-primary text-white border-brand-primary shadow-sm ring-1 ring-brand-primary/30"
+                            : "bg-surface-card hover:bg-surface-hover text-content-muted border-surface-border"
+                        }`}
+                      >
+                        {juzId}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Section 3: Past 30 Days Streak */}
+              <div className="p-4 rounded-2xl bg-surface-subtle/60 border border-surface-border space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-sm font-bold text-content-primary block">
+                      Past 30 Days Streak
+                    </span>
+                    <span className="text-xs text-content-muted">
+                      Number of days completed in the 30-day streak indicator
+                    </span>
+                  </div>
+                  <span className="text-sm font-mono font-bold text-brand-primary bg-brand-light px-3 py-1 rounded-xl border border-brand-primary/20">
+                    {manualStreakDays}/30 ({Math.round((manualStreakDays / 30) * 100)}%)
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setManualStreakDays((prev) => Math.max(0, prev - 1))}
+                    title="Decrease streak by 1 day"
+                    className="p-2.5 rounded-xl bg-surface-card hover:bg-surface-hover border border-surface-border text-content-secondary hover:text-content-primary transition cursor-pointer"
+                  >
+                    <Minus className="w-4 h-4" />
+                  </button>
+                  <input
+                    type="number"
+                    min={0}
+                    max={30}
+                    value={manualStreakDays}
+                    onChange={(e) =>
+                      setManualStreakDays(Math.max(0, Math.min(30, parseInt(e.target.value, 10) || 0)))
+                    }
+                    className="flex-1 bg-surface-card border border-surface-border rounded-xl px-3 py-2 text-center text-base font-mono font-bold text-content-primary focus:outline-none focus:border-brand-primary"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setManualStreakDays((prev) => Math.min(30, prev + 1))}
+                    title="Increase streak by 1 day"
+                    className="p-2.5 rounded-xl bg-surface-card hover:bg-surface-hover border border-surface-border text-content-secondary hover:text-content-primary transition cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Save Button & Notice */}
+              <div className="pt-2 flex flex-col items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setJuzTallyManually(manualTallyInput, manualCompletedJuzs);
+                    setCompletedStreakDaysManually(manualStreakDays);
+                    setProgressSaveNotice("Juz tally and streaks successfully updated!");
+                    setTimeout(() => setProgressSaveNotice(null), 3000);
+                  }}
+                  className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-brand-primary hover:bg-brand-hover text-white font-bold text-sm shadow-md transition active:scale-98 cursor-pointer"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>Apply Tally & Streak Adjustments</span>
+                </button>
+
+                {progressSaveNotice && (
+                  <div className="flex items-center gap-1.5 text-xs text-brand-primary font-semibold animate-fadeIn">
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>{progressSaveNotice}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 4: CUSTOMIZE 30 JUZS */}
           {activeTab === "juz" && (
             <div className="space-y-5">
               <div className="space-y-2">
@@ -814,6 +1155,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
             </div>
           )}
+
+          {/* TAB 4: MEDIA DOWNLOADS */}
+          {activeTab === "media" && <MediaDownloadsList />}
         </div>
 
         {/* Modal Footer */}

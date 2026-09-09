@@ -31,11 +31,14 @@ export interface AppSettings {
   rewindStepSeconds: number;
   forwardStepSeconds: number;
   timerTargetMinutes: number;
+  streakTargetMinutes?: number;
+  autoTimerDurationMinutes?: number;
   timerMode: TimerMode;
   streakStartDay: DayOfWeek;
   preferLocalAudio: boolean;
   themeMode: ThemeMode;
   themeColor: ThemeColor;
+  defaultPlaybackSpeed?: PlaybackSpeed;
   customJuzNames: Record<number, string>;
   customJuzRanges: Record<number, string>;
 }
@@ -47,6 +50,8 @@ export interface DayReadingRecord {
   // 96 slots in 24 hours (15 min each: index 0 to 95)
   // Each slot stores seconds read during that 15-min interval
   slots: Record<number, number>;
+  juzCompletedCount?: number;
+  completedJuzIds?: number[];
 }
 
 export interface UserLogEntry {
@@ -68,15 +73,24 @@ export interface UserState {
   playbackPositionSeconds: number; // saved each second
   timerSeconds: number; // saved each second
   timerTargetMinutes: number;
+  streakTargetMinutes?: number;
   lastActiveDate: string; // YYYY-MM-DD
   updatedAt: string; // ISO string for conflict resolution
   historyRecords: Record<string, DayReadingRecord>; // keyed by YYYY-MM-DD
   userLogs: UserLogEntry[];
+  activeDeviceId?: string; // Client device currently controlling playback
+  isPlaying?: boolean; // Whether audio is actively playing on this account
+  completedJuzs?: number[]; // List of completed Juz IDs (1-30)
+  juzTally?: number; // Total completed Juz count
 }
 
 export interface SyncPayload {
   state: UserState;
-  settings: AppSettings;
+  settings?: AppSettings;
+  deviceId?: string;
+  isPlaying?: boolean;
+  isStartingPlayback?: boolean;
+  action?: "claim_playback" | "sync" | "pause" | "heartbeat";
 }
 
 export interface AuthUser {

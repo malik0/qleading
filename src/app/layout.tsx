@@ -40,6 +40,9 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               try {
+                if (typeof window !== 'undefined' && window.location.protocol === 'http:' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+                  window.location.replace('https://' + window.location.host + window.location.pathname + window.location.search + window.location.hash);
+                }
                 var raw = localStorage.getItem('qleading_settings_v1');
                 var settings = raw ? JSON.parse(raw) : {};
                 var mode = settings.themeMode || 'dark';

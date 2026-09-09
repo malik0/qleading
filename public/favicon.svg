@@ -1,183 +1,30 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <defs>
-    <!-- Deep Cosmic Obsidian Dark Background -->
-    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#0a1024" />
-      <stop offset="50%" stop-color="#030712" />
-      <stop offset="100%" stop-color="#0d152c" />
+    <linearGradient id="mustardSepiaBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F3E5AB" />
+      <stop offset="50%" stop-color="#EAD896" />
+      <stop offset="100%" stop-color="#DFCA7E" />
     </linearGradient>
-
-    <!-- Spectrum Gradient for Q: Sacred Emerald -> Radiant Cyan -> Azure Blue -> Violet -> Rose Fuchsia -> Sunset Amber -> Gold -->
-    <linearGradient id="qSpectrum" x1="5%" y1="5%" x2="95%" y2="95%">
-      <stop offset="0%" stop-color="#10b981" />
-      <stop offset="16%" stop-color="#06b6d4" />
-      <stop offset="36%" stop-color="#3b82f6" />
-      <stop offset="60%" stop-color="#6366f1" />
-      <stop offset="78%" stop-color="#a855f7" />
-      <stop offset="90%" stop-color="#ec4899" />
-      <stop offset="96%" stop-color="#f97316" />
-      <stop offset="100%" stop-color="#fbbf24" />
-    </linearGradient>
-
-    <!-- Glowing Tail Ribbon Overlay -->
-    <linearGradient id="tailAccent" x1="10%" y1="10%" x2="90%" y2="90%">
-      <stop offset="0%" stop-color="#ec4899" />
-      <stop offset="35%" stop-color="#f43f5e" />
-      <stop offset="70%" stop-color="#fb923c" />
-      <stop offset="100%" stop-color="#facc15" />
-    </linearGradient>
-
-    <!-- Pure Luminous Gold Gradient -->
-    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#fef9c3" />
-      <stop offset="35%" stop-color="#fbbf24" />
-      <stop offset="75%" stop-color="#f59e0b" />
-      <stop offset="100%" stop-color="#d97706" />
-    </linearGradient>
-
-    <!-- Core Radial Glow behind the Quran -->
-    <radialGradient id="centerGlow" cx="48%" cy="44%" r="56%">
-      <stop offset="0%" stop-color="#06b6d4" stop-opacity="0.38" />
-      <stop offset="42%" stop-color="#6366f1" stop-opacity="0.22" />
-      <stop offset="75%" stop-color="#ec4899" stop-opacity="0.08" />
-      <stop offset="100%" stop-color="#000000" stop-opacity="0" />
-    </radialGradient>
-
-    <!-- Outer Squircle Rim Glow -->
-    <linearGradient id="rimGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#10b981" stop-opacity="0.8" />
-      <stop offset="25%" stop-color="#06b6d4" stop-opacity="0.9" />
-      <stop offset="55%" stop-color="#6366f1" stop-opacity="0.7" />
-      <stop offset="80%" stop-color="#ec4899" stop-opacity="0.75" />
-      <stop offset="100%" stop-color="#fbbf24" stop-opacity="0.95" />
-    </linearGradient>
-
-    <!-- Book Page Gradient -->
-    <linearGradient id="pageGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#ffffff" />
-      <stop offset="100%" stop-color="#f0f9ff" />
-    </linearGradient>
-
-    <!-- Filters -->
-    <filter id="shadowMaster" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="14" stdDeviation="18" flood-color="#000000" flood-opacity="0.85" />
-    </filter>
-    <filter id="qGlowMaster" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="0" stdDeviation="14" flood-color="#06b6d4" flood-opacity="0.5" />
-    </filter>
-    <filter id="tailGlowMaster" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="2" stdDeviation="12" flood-color="#f43f5e" flood-opacity="0.55" />
-    </filter>
   </defs>
 
-  <!-- Base Squircle Container -->
-  <rect width="512" height="512" rx="116" fill="url(#bgGrad)" />
-  <rect width="512" height="512" rx="116" fill="url(#centerGlow)" />
-  <rect x="6" y="6" width="500" height="500" rx="112" stroke="url(#rimGrad)" stroke-width="2.5" fill="none" opacity="0.5" />
+  <rect width="512" height="512" rx="120" fill="url(#mustardSepiaBg)" />
+  <rect x="6" y="6" width="500" height="500" rx="114" stroke="#CBB566" stroke-width="5" fill="none" opacity="0.5" />
 
-  <!-- Subtle Islamic Geometric Watermark -->
-  <g transform="translate(242, 230)" opacity="0.055" stroke="#ffffff" stroke-width="2" fill="none">
-    <circle r="200" />
-    <rect x="-142" y="-142" width="284" height="284" rx="16" />
-    <rect x="-142" y="-142" width="284" height="284" rx="16" transform="rotate(45)" />
-  </g>
-
-  <!-- MASTER 'Q' COMPOSITION -->
-  <g filter="url(#shadowMaster)">
-
-    <!-- THE UNIFIED 'Q' BODY: Perfectly proportioned (Center 242, 230) -->
-    <!-- Outer Radius R=164, Inner Radius r=108, Thickness=56px -->
-    <!-- Sweeps seamlessly into the bottom-right tail flourish -->
+  <g stroke="#121212" stroke-width="32" stroke-linecap="round" stroke-linejoin="round" fill="none">
     <path d="
-      M 242 66
-      C 151 66, 78 139, 78 230
-      C 78 321, 151 394, 242 394
-      C 286 394, 326 376, 355 346
-      C 384 376, 424 416, 460 424
-      C 468 425, 472 417, 466 411
-      C 440 384, 408 344, 390 306
-      C 400 283, 406 257, 406 230
-      C 406 139, 333 66, 242 66
-      Z
-      M 242 122
-      C 302 122, 350 170, 350 230
-      C 350 290, 302 338, 242 338
-      C 182 338, 134 290, 134 230
-      C 134 170, 182 122, 242 122
-      Z
-    " fill="url(#qSpectrum)" fill-rule="evenodd" filter="url(#qGlowMaster)" />
-
-    <!-- Luminous 3D Accent Ribbon along the Tail -->
+      M 152 232
+      C 168 184, 206 142, 252 142
+      C 275 142, 288 156, 288 180
+      L 288 396
+      C 288 424, 314 430, 336 408
+      C 356 388, 370 350, 374 324
+    " />
     <path d="
-      M 355 346
-      C 384 376, 424 416, 460 424
-      C 468 425, 472 417, 466 411
-      C 440 384, 408 344, 390 306
-      C 382 322, 370 336, 355 346
-      Z
-    " fill="url(#tailAccent)" filter="url(#tailGlowMaster)" />
-
-    <!-- Gleaming Gold Filament on Tail Edge -->
-    <path d="
-      M 374 354
-      C 402 382, 436 414, 460 422
-      C 446 406, 420 376, 394 334
-    " stroke="url(#goldGrad)" stroke-width="4.5" stroke-linecap="round" fill="none" opacity="0.9" />
-
-    <!-- SACRED OPEN QURAN & RECITATION AUDIO EMBLEM (Center cx=242, cy=230) -->
-    <g transform="translate(242, 226)">
-
-      <!-- Concentric Audio Wave Arcs (Continuous Recitation) -->
-      <path d="M -36 -62 A 44 44 0 0 1 36 -62" stroke="url(#goldGrad)" stroke-width="3.5" fill="none" stroke-linecap="round" opacity="0.7" />
-      <path d="M -22 -52 A 26 26 0 0 1 22 -52" stroke="url(#goldGrad)" stroke-width="4" fill="none" stroke-linecap="round" opacity="0.9" />
-      <circle cx="0" cy="-42" r="3.5" fill="url(#goldGrad)" />
-
-      <!-- Left Page of Holy Quran (White pearl with soft drop shadow) -->
-      <path d="
-        M -2 -26
-        C -32 -42, -74 -36, -94 -18
-        C -98 -14, -98 30, -98 32
-        C -76 16, -34 18, -2 30
-        Z
-      " fill="url(#pageGrad)" />
-
-      <!-- Right Page of Holy Quran -->
-      <path d="
-        M 2 -26
-        C 32 -42, 74 -36, 94 -18
-        C 98 -14, 98 30, 98 32
-        C 76 16, 34 18, 2 30
-        Z
-      " fill="url(#pageGrad)" />
-
-      <!-- Quranic Ayah Lines (Emerald & Sky Cyan) -->
-      <path d="
-        M -84 -6 C -64 -18, -40 -16, -16 -6
-        M -84 6 C -64 -6, -40 -4, -16 6
-        M -84 18 C -64 6, -40 8, -16 18
-        M 84 -6 C 64 -18, 40 -16, 16 -6
-        M 84 6 C 64 -4, 40 -2, 16 6
-        M 84 18 C 64 6, 40 8, 16 18
-      " stroke="#0284c7" stroke-width="3.2" stroke-linecap="round" opacity="0.85" />
-
-      <!-- Center Golden Spine -->
-      <line x1="0" y1="-28" x2="0" y2="32" stroke="url(#goldGrad)" stroke-width="5.5" stroke-linecap="round" />
-
-      <!-- Golden Bookmark Ribbon (Tahfeez ribbon) with V-cut -->
-      <path d="
-        M 0 30
-        C -6 40, -8 52, -12 60
-        L 0 54
-        L 12 60
-        C 8 52, 6 40, 0 30
-        Z
-      " fill="url(#goldGrad)" />
-
-      <!-- Wooden Quran Stand (Rehal) Base in Polished Gold -->
-      <path d="
-        M -60 40 L -28 56 L -6 48
-        M 60 40 L 28 56 L 6 48
-      " stroke="url(#goldGrad)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" />
-    </g>
+      M 288 210
+      C 276 170, 242 144, 198 144
+      C 148 144, 114 186, 114 238
+      C 114 288, 148 326, 198 326
+      C 242 326, 276 296, 288 250
+    " />
   </g>
 </svg>

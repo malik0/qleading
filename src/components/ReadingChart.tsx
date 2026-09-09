@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useApp } from "../context/AppContext";
-import { BarChart3, Clock3, Info, Focus } from "lucide-react";
-import { formatAudioTime } from "../lib/utils";
+import { BarChart3, Clock3, Info, Focus, ChevronLeft, ChevronRight } from "lucide-react";
+import { formatAudioTime, getLocalDateString } from "../lib/utils";
 
 export const ReadingChart: React.FC = () => {
-  const { todayRecord } = useApp();
+  const { todayRecord, historyRecords } = useApp();
+  const [selectedDayOffset, setSelectedDayOffset] = useState<number>(0); // 0 = today, 1 = yesterday, ...
   const [hoveredSlot, setHoveredSlot] = useState<{
     timeLabel: string;
     seconds: number;
@@ -58,13 +59,53 @@ export const ReadingChart: React.FC = () => {
   useEffect(() => {
     if (currentHour !== null && !hasInitialCenteredRef.current) {
       hasInitialCenteredRef.current = true;
-      // Slight timeout allows initial DOM layout and geometry to stabilize
       const timer = setTimeout(() => {
         scrollToCurrentHour("auto");
       }, 60);
       return () => clearTimeout(timer);
     }
   }, [currentHour, scrollToCurrentHour]);
+
+  // Selected Day Calculation
+  const selectedDate = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - selectedDayOffset);
+    return d;
+  }, [selectedDayOffset]);
+
+  const selectedDateStr = useMemo(() => {
+    return getLocalDateString(selectedDate);
+  }, [selectedDate]);
+
+  const isSelectedDayToday = selectedDayOffset === 0;
+
+  const activeDayRecord = useMemo(() => {
+    if (isSelectedDayToday) return todayRecord;
+    return (
+      historyRecords[selectedDateStr] || {
+        date: selectedDateStr,
+        secondsRead: 0,
+        targetReached: false,
+        slots: {},
+        juzCompletedCount: 0,
+        completedJuzIds: [],
+      }
+    );
+  }, [isSelectedDayToday, todayRecord, historyRecords, selectedDateStr]);
+
+  const formattedDayLabel = useMemo(() => {
+    if (selectedDayOffset === 0) {
+      return `Today (${selectedDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })})`;
+    }
+    if (selectedDayOffset === 1) {
+      return `Yesterday (${selectedDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })})`;
+    }
+    return selectedDate.toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    });
+  }, [selectedDayOffset, selectedDate]);
 
   const hours = Array.from({ length: 24 }, (_, i) => i);
 
@@ -103,11 +144,11 @@ export const ReadingChart: React.FC = () => {
     };
   };
 
-  const totalMinutesToday = Math.round((todayRecord.secondsRead || 0) / 60);
+  const totalMinutesForDay = Math.round((activeDayRecord.secondsRead || 0) / 60);
 
   return (
     <div className="w-full bg-surface-card border border-surface-border rounded-3xl p-5 sm:p-6 backdrop-blur-xl shadow-xl space-y-4 transition-colors duration-200">
-      {/* Chart Title & Today Summary */}
+      {/* Chart Title, Day Navigation & Summary */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
           <div className="p-2.5 rounded-xl bg-brand-light text-brand-primary">
@@ -116,7 +157,7 @@ export const ReadingChart: React.FC = () => {
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-base font-bold text-content-primary">24-Hour Reading Timeline</h2>
-              {currentHour !== null && (
+              {isSelectedDayToday && currentHour !== null && (
                 <button
                   type="button"
                   onClick={() => scrollToCurrentHour("smooth")}
@@ -132,15 +173,56 @@ export const ReadingChart: React.FC = () => {
                 </button>
               )}
             </div>
+
+            {/* Requirement 5: Day Navigation Controls (Back & Forward across days) */}
+            <div className="flex items-center gap-1.5 mt-1.5">
+              <button
+                type="button"
+                onClick={() => setSelectedDayOffset((prev) => prev + 1)}
+                title="View Previous Day"
+                className="p-1 rounded-lg bg-surface-subtle hover:bg-surface-hover text-content-secondary hover:text-content-primary border border-surface-border transition shadow-sm cursor-pointer active:scale-95 flex items-center justify-center"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+
+              <span className="text-xs font-semibold text-content-primary font-mono px-2 py-0.5 rounded-lg bg-surface-subtle border border-surface-border select-none">
+                {formattedDayLabel}
+              </span>
+
+              <button
+                type="button"
+                onClick={() => setSelectedDayOffset((prev) => Math.max(0, prev - 1))}
+                disabled={isSelectedDayToday}
+                title={isSelectedDayToday ? "Today is the latest date" : "View Next Day"}
+                className={`p-1 rounded-lg border transition shadow-sm flex items-center justify-center ${
+                  isSelectedDayToday
+                    ? "bg-surface-subtle/40 border-surface-border/50 text-content-muted/40 cursor-not-allowed"
+                    : "bg-surface-subtle hover:bg-surface-hover text-content-secondary hover:text-content-primary border border-surface-border cursor-pointer active:scale-95"
+                }`}
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+
+              {!isSelectedDayToday && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedDayOffset(0)}
+                  className="px-2 py-0.5 rounded-lg text-[10px] font-bold text-brand-primary bg-brand-light hover:bg-brand-light/70 border border-brand-primary/20 transition cursor-pointer"
+                  title="Jump back to Today"
+                >
+                  Today
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
         <div className="text-right">
           <span className="text-xs text-content-muted block font-medium">
-            Total Today
+            {isSelectedDayToday ? "Total Today" : "Total for Day"}
           </span>
           <span className="text-sm font-bold text-brand-primary font-mono">
-            {totalMinutesToday} mins ({formatAudioTime(todayRecord.secondsRead || 0)})
+            {totalMinutesForDay} mins ({formatAudioTime(activeDayRecord.secondsRead || 0)})
           </span>
         </div>
       </div>
@@ -173,10 +255,10 @@ export const ReadingChart: React.FC = () => {
       {/* 5.1 24-HOUR VERTICAL CHART WITH 15-MINUTE SLOTS */}
       <div
         ref={scrollContainerRef}
-        className="space-y-1.5 max-h-96 overflow-y-auto pr-1.5 scrollbar-thin relative"
+        className="space-y-1.5 max-h-96 overflow-y-auto overflow-x-hidden p-1 pr-2 scrollbar-thin relative"
       >
         {hours.map((hour) => {
-          const isCurrentHour = currentHour === hour;
+          const isCurrentHour = isSelectedDayToday && currentHour === hour;
           const hourLabel = `${String(hour).padStart(2, "0")}:00`;
           const baseSlotIdx = hour * 4;
 
@@ -213,8 +295,8 @@ export const ReadingChart: React.FC = () => {
               <div className="flex-1 grid grid-cols-4 gap-1.5 sm:gap-2">
                 {[0, 1, 2, 3].map((subSlot) => {
                   const slotIndex = baseSlotIdx + subSlot;
-                  const isCurrentSlot = isCurrentHour && currentSlotIndex === slotIndex;
-                  const secInSlot = todayRecord.slots?.[slotIndex] || 0;
+                  const isCurrentSlot = isSelectedDayToday && isCurrentHour && currentSlotIndex === slotIndex;
+                  const secInSlot = activeDayRecord.slots?.[slotIndex] || 0;
                   const startMin = String(subSlot * 15).padStart(2, "0");
                   const endMin = String((subSlot + 1) * 15).padStart(2, "0");
                   const slotTimeLabel = `${String(hour).padStart(2, "0")}:${startMin} - ${String(hour).padStart(2, "0")}:${endMin}`;

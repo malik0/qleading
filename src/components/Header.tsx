@@ -25,15 +25,9 @@ export const Header: React.FC<HeaderProps> = ({
             <QLogo className="w-10 h-10" />
           </div>
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-content-primary flex items-center gap-2">
+            <h1 className="text-xl font-bold tracking-tight text-content-primary">
               Qleading
-              <span className="text-[10px] uppercase font-semibold tracking-wider bg-brand-light text-brand-primary border border-brand-primary/30 px-2 py-0.5 rounded-full">
-                PWA
-              </span>
             </h1>
-            <p className="text-xs text-content-muted hidden sm:block">
-              Continuous 30 Juz Quran Recitation & Reading Tracker
-            </p>
           </div>
         </div>
 
