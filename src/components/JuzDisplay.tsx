@@ -236,119 +236,120 @@ export const JuzDisplay: React.FC = () => {
       {/* 1.0 & 1.1 JUZ TITLE & SURAH RANGE */}
       <div className="flex flex-col items-center text-center space-y-1.5 relative px-2 z-30">
         {/* Juz Selector Dropdown */}
-        <div ref={dropdownRef} className="flex items-center gap-2 relative max-w-full">
-          <div className="relative inline-block max-w-full">
-            <button
-              onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-              className="flex items-center gap-2 px-3.5 py-1.5 rounded-2xl bg-surface-subtle hover:bg-surface-hover border border-surface-border text-content-primary font-bold text-base sm:text-lg shadow-md transition group max-w-full cursor-pointer"
-            >
-              <Volume2 className="w-5 h-5 text-brand-primary group-hover:scale-110 transition shrink-0" />
-              <span className="truncate">{juzName}</span>
-              <ChevronDown
-                className={`w-4 h-4 text-content-muted transition-transform duration-200 shrink-0 ${
-                  isDropdownOpen ? "rotate-180" : ""
-                }`}
+        <div ref={dropdownRef} className="relative inline-flex flex-col items-center max-w-full">
+          <button
+            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+            className="flex items-center gap-2 px-3.5 py-1.5 rounded-2xl bg-surface-subtle hover:bg-surface-hover border border-surface-border text-content-primary font-bold text-base sm:text-lg shadow-md transition group max-w-full cursor-pointer"
+          >
+            <Volume2 className="w-5 h-5 text-brand-primary group-hover:scale-110 transition shrink-0" />
+            <span className="truncate">{juzName}</span>
+            <ChevronDown
+              className={`w-4 h-4 text-content-muted transition-transform duration-200 shrink-0 ${
+                isDropdownOpen ? "rotate-180" : ""
+              }`}
+            />
+          </button>
+
+          {/* 1.2 DROPDOWN MENU FOR ALL 30 JUZS (Scrollable, 5 items visible at a time) */}
+          {isDropdownOpen && (
+            <>
+              {/* Backdrop to dismiss when clicking/tapping outside */}
+              <div
+                className="fixed inset-0 z-40 bg-black/20 sm:bg-transparent"
+                onClick={() => setIsDropdownOpen(false)}
               />
-            </button>
 
-            {/* 1.2 DROPDOWN MENU FOR ALL 30 JUZS (Scrollable, 5 items visible at a time) */}
-            {isDropdownOpen && (
-              <>
-                {/* Backdrop to dismiss when clicking/tapping outside */}
-                <div
-                  className="fixed inset-0 z-40 bg-black/20 sm:bg-transparent"
-                  onClick={() => setIsDropdownOpen(false)}
-                />
-
-                {/* Dropdown Container: Centered horizontally under the button */}
-                <div
-                  className="absolute left-1/2 mt-2 w-[min(22rem,calc(100vw-2rem))] sm:w-84 bg-surface-card border border-surface-border rounded-2xl shadow-2xl z-50 animate-fadeIn overflow-hidden"
-                  style={{ transform: "translateX(-50%)" }}
-                >
-                  {/* Dropdown Header */}
-                  <div className="px-3.5 py-2 text-xs font-bold uppercase tracking-wider text-content-muted flex items-center justify-between border-b border-surface-border bg-surface-subtle/50">
-                    <div className="flex items-center gap-1.5">
-                      <Volume2 className="w-3.5 h-3.5 text-brand-primary" />
-                      <span>Select Juz (1–30)</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setIsDropdownOpen(false)}
-                      className="p-1 rounded-lg hover:bg-surface-hover text-content-muted hover:text-content-primary transition cursor-pointer"
-                      title="Close dropdown"
-                      aria-label="Close"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
+              {/* Dropdown Container: Centered horizontally directly under the button */}
+              <div
+                className="absolute top-full mt-2 z-50 w-[min(22rem,calc(100vw-2rem))] sm:w-84 bg-surface-card border border-surface-border rounded-2xl shadow-2xl overflow-hidden animate-fadeIn"
+                style={{
+                  left: "50%",
+                  transform: "translateX(-50%)",
+                  translate: "-50% 0",
+                }}
+              >
+                {/* Dropdown Header */}
+                <div className="px-3.5 py-2 text-xs font-bold uppercase tracking-wider text-content-muted flex items-center justify-between border-b border-surface-border bg-surface-subtle/50">
+                  <div className="flex items-center gap-1.5">
+                    <Volume2 className="w-3.5 h-3.5 text-brand-primary" />
+                    <span>Select Juz (1–30)</span>
                   </div>
-
-                  {/* Scrollable list of all 30 Juzes - exactly 5 items visible at a time */}
-                  <div
-                    ref={listContainerRef}
-                    className="h-[288px] overflow-y-auto scrollbar-thin p-1.5 flex flex-col gap-1"
+                  <button
+                    type="button"
+                    onClick={() => setIsDropdownOpen(false)}
+                    className="p-1 rounded-lg hover:bg-surface-hover text-content-muted hover:text-content-primary transition cursor-pointer"
+                    title="Close dropdown"
+                    aria-label="Close"
                   >
-                    {juzList.map((item) => {
-                      const isCurrent = item.id === currentJuzId;
-                      const displayName = item.customName || item.defaultName;
-                      const displayRange = item.customRange || item.defaultRange;
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
 
-                      return (
-                        <button
-                          key={item.id}
-                          type="button"
-                          onClick={() => {
-                            selectJuz(item.id);
-                            setIsDropdownOpen(false);
-                          }}
-                          className={`w-full h-[52px] shrink-0 text-left px-2.5 sm:px-3 py-1.5 rounded-xl flex items-center gap-2.5 transition cursor-pointer ${
+                {/* Scrollable list of all 30 Juzes - exactly 5 items visible at a time */}
+                <div
+                  ref={listContainerRef}
+                  className="h-[288px] overflow-y-auto scrollbar-thin p-1.5 flex flex-col gap-1"
+                >
+                  {juzList.map((item) => {
+                    const isCurrent = item.id === currentJuzId;
+                    const displayName = item.customName || item.defaultName;
+                    const displayRange = item.customRange || item.defaultRange;
+
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => {
+                          selectJuz(item.id);
+                          setIsDropdownOpen(false);
+                        }}
+                        className={`w-full h-[52px] shrink-0 text-left px-2.5 sm:px-3 py-1.5 rounded-xl flex items-center gap-2.5 transition cursor-pointer ${
+                          isCurrent
+                            ? "bg-brand-primary text-white font-semibold shadow-md"
+                            : "hover:bg-surface-subtle active:bg-surface-subtle/80 text-content-secondary hover:text-content-primary"
+                        }`}
+                      >
+                        {/* Left: Juz Number Badge */}
+                        <span
+                          className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 ${
                             isCurrent
-                              ? "bg-brand-primary text-white font-semibold shadow-md"
-                              : "hover:bg-surface-subtle active:bg-surface-subtle/80 text-content-secondary hover:text-content-primary"
+                              ? "bg-white/20 text-white shadow-xs"
+                              : "bg-surface-subtle text-content-muted border border-surface-border"
                           }`}
                         >
-                          {/* Left: Juz Number Badge */}
-                          <span
-                            className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 ${
-                              isCurrent
-                                ? "bg-white/20 text-white shadow-xs"
-                                : "bg-surface-subtle text-content-muted border border-surface-border"
-                            }`}
-                          >
-                            {item.id}
-                          </span>
+                          {item.id}
+                        </span>
 
-                          {/* Right: Juz Title & Range (Left aligned) */}
-                          <div className="flex-1 min-w-0 flex flex-col justify-center text-left">
-                            <div className="flex items-center justify-between gap-1 w-full">
-                              <span className="font-bold text-xs sm:text-sm truncate">
-                                {displayName}
+                        {/* Right: Juz Title & Range (Left aligned) */}
+                        <div className="flex-1 min-w-0 flex flex-col justify-center text-left">
+                          <div className="flex items-center justify-between gap-1 w-full">
+                            <span className="font-bold text-xs sm:text-sm truncate">
+                              {displayName}
+                            </span>
+                            {isCurrent && (
+                              <span className="text-[9px] sm:text-[10px] bg-white/25 text-white font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider shrink-0">
+                                Playing
                               </span>
-                              {isCurrent && (
-                                <span className="text-[9px] sm:text-[10px] bg-white/25 text-white font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider shrink-0">
-                                  Playing
-                                </span>
-                              )}
-                            </div>
-                            <div
-                              className={`text-[10.5px] sm:text-xs truncate w-full leading-tight tracking-tight text-left ${
-                                isCurrent
-                                  ? "text-white/85 font-medium"
-                                  : "text-content-muted font-normal"
-                              }`}
-                              title={displayRange}
-                            >
-                              {formatDisplayRange(displayRange)}
-                            </div>
+                            )}
                           </div>
-                        </button>
-                      );
-                    })}
-                  </div>
+                          <div
+                            className={`text-[10.5px] sm:text-xs truncate w-full leading-tight tracking-tight text-left ${
+                              isCurrent
+                                ? "text-white/85 font-medium"
+                                : "text-content-muted font-normal"
+                            }`}
+                            title={displayRange}
+                          >
+                            {formatDisplayRange(displayRange)}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
-              </>
-            )}
-          
-          </div>
+              </div>
+            </>
+          )}
         </div>
 
         {/* 1.1 Juz Range currently playing (Without 'Surah range:' prefix) */}
