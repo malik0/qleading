@@ -93,22 +93,24 @@ export const JuzDisplay: React.FC = () => {
     (todayRecord.completedJuzIds ? todayRecord.completedJuzIds.length : 0);
 
   return (
-    <div className="w-full bg-surface-card border border-surface-border rounded-2xl sm:rounded-3xl p-4 sm:p-5 backdrop-blur-xl shadow-2xl relative overflow-hidden transition-colors duration-200">
-      {/* Subtle Background Glows matching active theme */}
-      <div
-        className="absolute -top-24 -right-24 w-72 h-72 rounded-full blur-3xl pointer-events-none transition-all duration-300"
-        style={{
-          backgroundColor: "var(--color-primary)",
-          opacity: 0.12,
-        }}
-      />
-      <div
-        className="absolute -bottom-24 -left-24 w-72 h-72 rounded-full blur-3xl pointer-events-none transition-all duration-300"
-        style={{
-          backgroundColor: "var(--color-primary-hover)",
-          opacity: 0.1,
-        }}
-      />
+    <div className="w-full bg-surface-card border border-surface-border rounded-2xl sm:rounded-3xl p-4 sm:p-5 backdrop-blur-xl shadow-2xl relative z-20 transition-colors duration-200">
+      {/* Subtle Background Glows matching active theme (isolated in overflow-hidden layer) */}
+      <div className="absolute inset-0 rounded-2xl sm:rounded-3xl overflow-hidden pointer-events-none -z-10">
+        <div
+          className="absolute -top-24 -right-24 w-72 h-72 rounded-full blur-3xl pointer-events-none transition-all duration-300"
+          style={{
+            backgroundColor: "var(--color-primary)",
+            opacity: 0.12,
+          }}
+        />
+        <div
+          className="absolute -bottom-24 -left-24 w-72 h-72 rounded-full blur-3xl pointer-events-none transition-all duration-300"
+          style={{
+            backgroundColor: "var(--color-primary-hover)",
+            opacity: 0.1,
+          }}
+        />
+      </div>
 
       {/* 1.4 MAIN READING TIMER (INTERACTIVE HERO TIMER) */}
       <div className="relative flex flex-col items-center justify-center pt-2 pb-4">
