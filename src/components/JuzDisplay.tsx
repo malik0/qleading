@@ -27,7 +27,6 @@ export const JuzDisplay: React.FC = () => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isTimerModalOpen, setIsTimerModalOpen] = useState(false);
   const [currentDateTime, setCurrentDateTime] = useState<Date | null>(null);
-  const selectedJuzRef = useRef<HTMLButtonElement | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -49,20 +48,6 @@ export const JuzDisplay: React.FC = () => {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isDropdownOpen]);
-
-  // Focus the list around the current selected Juz number when dropdown opens
-  useEffect(() => {
-    if (isDropdownOpen) {
-      // Use requestAnimationFrame or timeout to ensure dropdown DOM node is painted
-      const timer = setTimeout(() => {
-        selectedJuzRef.current?.scrollIntoView({
-          block: "center",
-          behavior: "instant",
-        });
-      }, 50);
-      return () => clearTimeout(timer);
-    }
-  }, [isDropdownOpen, currentJuzId]);
 
   // Time remaining adjusted for playback speed (Requirement 1.3)
   const rawRemainingSeconds = Math.max(0, duration - playbackPosition);
@@ -255,7 +240,6 @@ export const JuzDisplay: React.FC = () => {
                       return (
                         <button
                           key={item.id}
-                          ref={isCurrent ? selectedJuzRef : null}
                           onClick={() => {
                             selectJuz(item.id);
                             setIsDropdownOpen(false);
