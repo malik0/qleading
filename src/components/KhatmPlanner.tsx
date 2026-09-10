@@ -682,11 +682,25 @@ export const KhatmPlanner: React.FC = () => {
               </div>
             </div>
 
-            {/* Mobile swipe hint */}
-            <div className="text-[10px] text-content-muted flex items-center justify-end gap-1 sm:hidden">
+            {/* Mobile swipe hint / Click to scroll track to today */}
+            <button
+              type="button"
+              onClick={() => {
+                if (todayTrackColRef.current) {
+                  todayTrackColRef.current.scrollIntoView({
+                    behavior: "smooth",
+                    inline: "center",
+                    block: "nearest",
+                  });
+                  todayTrackColRef.current.focus();
+                }
+              }}
+              className="text-[10px] text-content-muted hover:text-brand-primary active:scale-95 flex items-center justify-end gap-1 sm:hidden cursor-pointer transition select-none ml-auto py-0.5 focus:outline-none"
+              title="Focus current date in track"
+            >
               <span>Scroll track</span>
               <span>→</span>
-            </div>
+            </button>
 
             {/* The Track Container */}
             <div className="relative overflow-x-auto pb-2 scrollbar-thin">
@@ -717,7 +731,8 @@ export const KhatmPlanner: React.FC = () => {
                       <div
                         key={`track-col-${day.dayIndex}`}
                         ref={day.isToday ? todayTrackColRef : null}
-                        className={`flex flex-col justify-between min-w-[56px] sm:min-w-[64px] p-1 rounded-2xl transition-colors ${
+                        tabIndex={day.isToday ? -1 : undefined}
+                        className={`flex flex-col justify-between min-w-[56px] sm:min-w-[64px] p-1 rounded-2xl transition-colors outline-none ${
                           day.isToday
                             ? "bg-brand-light/30 border border-brand-primary/30"
                             : "hover:bg-surface-card/50"

@@ -184,12 +184,12 @@ export const JuzDisplay: React.FC = () => {
         </button>
 
         {/* How Much Listened Today */}
-        <div className="mt-3 flex items-center justify-center gap-1.5 select-none animate-fadeIn">
-          <span className="text-2xl sm:text-3xl md:text-4xl font-extrabold font-mono text-brand-primary">
+        <div className="mt-3 flex flex-col items-center justify-center text-center select-none animate-fadeIn">
+          <span className="text-2xl sm:text-3xl md:text-4xl font-extrabold font-mono text-brand-primary leading-none">
             {Math.round((todayRecord.secondsRead || 0) / 60)}
           </span>
-          <span className="text-sm sm:text-base font-semibold text-content-secondary">
-            min listened today
+          <span className="text-xs sm:text-sm font-semibold text-content-secondary mt-1">
+            Minutes listened today
           </span>
         </div>
       </div>
@@ -215,57 +215,67 @@ export const JuzDisplay: React.FC = () => {
               />
             </button>
 
-            {/* 1.2 DROPDOWN MENU FOR ALL 30 JUZS */}
-            {isDropdownOpen && (
-              <div className="absolute left-1/2 -translate-x-1/2 mt-2 w-[90vw] max-w-sm sm:w-96 max-h-[60vh] sm:max-h-[460px] overflow-y-auto bg-surface-card border border-surface-border rounded-2xl shadow-2xl p-2 z-50 divide-y divide-surface-border">
-                <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-content-muted">
-                  Select from 30 Quran Juz
-                </div>
-                <div className="py-1">
-                  {juzList.map((item) => {
-                    const isCurrent = item.id === currentJuzId;
-                    const displayName = item.customName || item.defaultName;
-                    const displayRange = item.customRange || item.defaultRange;
+            {/* 1.2 DROPDOWN MENU FOR NEARBY JUZS (2 above & 2 below current playing Juz) */}
+            {isDropdownOpen && (() => {
+              const currentIdx = juzList.findIndex((item) => item.id === currentJuzId);
+              const startIdx = Math.max(0, currentIdx >= 0 ? currentIdx - 2 : 0);
+              const endIdx = Math.min(
+                juzList.length,
+                currentIdx >= 0 ? currentIdx + 3 : 5
+              );
+              const nearbyJuzList = juzList.slice(startIdx, endIdx);
 
-                    return (
-                      <button
-                        key={item.id}
-                        ref={isCurrent ? selectedJuzRef : null}
-                        onClick={() => {
-                          selectJuz(item.id);
-                          setIsDropdownOpen(false);
-                        }}
-                        className={`w-full text-left px-3 py-2.5 rounded-xl flex items-center justify-between text-xs sm:text-sm transition ${
-                          isCurrent
-                            ? "bg-brand-primary text-white font-semibold shadow-sm"
-                            : "hover:bg-surface-subtle text-content-secondary hover:text-content-primary"
-                        }`}
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <span
-                            className={`w-6 h-6 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 ${
-                              isCurrent
-                                ? "bg-white/20 text-white"
-                                : "bg-surface-subtle text-content-muted"
-                            }`}
-                          >
-                            {item.id}
-                          </span>
-                          <span className="font-medium truncate">{displayName}</span>
-                        </div>
-                        <span
-                          className={`text-xs font-mono shrink-0 ${
-                            isCurrent ? "text-white/80" : "text-content-muted"
+              return (
+                <div className="absolute left-1/2 -translate-x-1/2 mt-2 w-[90vw] max-w-sm sm:w-80 bg-surface-card border border-surface-border rounded-2xl shadow-2xl p-2 z-50 divide-y divide-surface-border animate-fadeIn">
+                  <div className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-content-muted">
+                    Select Juz
+                  </div>
+                  <div className="py-1">
+                    {nearbyJuzList.map((item) => {
+                      const isCurrent = item.id === currentJuzId;
+                      const displayName = item.customName || item.defaultName;
+                      const displayRange = item.customRange || item.defaultRange;
+
+                      return (
+                        <button
+                          key={item.id}
+                          ref={isCurrent ? selectedJuzRef : null}
+                          onClick={() => {
+                            selectJuz(item.id);
+                            setIsDropdownOpen(false);
+                          }}
+                          className={`w-full text-left px-3 py-2.5 rounded-xl flex items-center justify-between text-xs sm:text-sm transition ${
+                            isCurrent
+                              ? "bg-brand-primary text-white font-semibold shadow-sm"
+                              : "hover:bg-surface-subtle text-content-secondary hover:text-content-primary"
                           }`}
                         >
-                          {displayRange}
-                        </span>
-                      </button>
-                    );
-                  })}
+                          <div className="flex items-center gap-2.5">
+                            <span
+                              className={`w-6 h-6 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 ${
+                                isCurrent
+                                  ? "bg-white/20 text-white"
+                                  : "bg-surface-subtle text-content-muted"
+                              }`}
+                            >
+                              {item.id}
+                            </span>
+                            <span className="font-medium truncate">{displayName}</span>
+                          </div>
+                          <span
+                            className={`text-xs font-mono shrink-0 ${
+                              isCurrent ? "text-white/80" : "text-content-muted"
+                            }`}
+                          >
+                            {displayRange}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
           </div>
         </div>
 

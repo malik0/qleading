@@ -44,9 +44,6 @@ export const JuzListTable: React.FC = () => {
       <div className="flex items-center justify-between gap-3">
         <div>
           <h2 className="text-base font-bold text-content-primary">Juz Checklist</h2>
-          <p className="text-xs text-content-muted">
-            Tap any Juz to mark completed • Tap Play to listen
-          </p>
         </div>
 
         {/* Percentage indicator and progress bar */}

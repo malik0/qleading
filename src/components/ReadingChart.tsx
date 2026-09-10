@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useApp } from "../context/AppContext";
-import { Clock3, Info, Focus, ChevronLeft, ChevronRight } from "lucide-react";
+import { Clock3, Focus, ChevronLeft, ChevronRight } from "lucide-react";
 import { formatAudioTime, getLocalDateString } from "../lib/utils";
 
 export const ReadingChart: React.FC = () => {
@@ -149,15 +149,15 @@ export const ReadingChart: React.FC = () => {
   return (
     <div className="w-full bg-surface-card border border-surface-border rounded-2xl sm:rounded-3xl p-4 sm:p-6 backdrop-blur-xl shadow-xl space-y-4 transition-colors duration-200">
       {/* Chart Title, Day Navigation & Summary */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-base font-bold text-content-primary">24-Hour Reading Timeline</h2>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="flex flex-col sm:items-start w-full sm:w-auto">
+          <div className="flex items-center justify-between sm:justify-start sm:gap-2 w-full">
+            <h2 className="text-base font-bold text-content-primary">Listening Timeline</h2>
             {isSelectedDayToday && currentHour !== null && (
               <button
                 type="button"
                 onClick={() => scrollToCurrentHour("smooth")}
-                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-[11px] font-semibold text-brand-primary bg-brand-light hover:bg-brand-light/70 border border-brand-primary/20 transition-all shadow-sm active:scale-95 cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-[11px] font-semibold text-brand-primary bg-brand-light hover:bg-brand-light/70 border border-brand-primary/20 transition-all shadow-sm active:scale-95 cursor-pointer ml-auto sm:ml-0"
                 title="Center focus current hour"
               >
                 <span className="relative flex h-2 w-2">
@@ -171,7 +171,7 @@ export const ReadingChart: React.FC = () => {
           </div>
 
           {/* Requirement 5: Day Navigation Controls (Back & Forward across days) */}
-          <div className="flex items-center gap-1.5 mt-1.5">
+          <div className="flex items-center justify-end sm:justify-start gap-1.5 mt-2 sm:mt-1.5 w-full">
             <button
               type="button"
               onClick={() => setSelectedDayOffset((prev) => prev + 1)}
@@ -212,7 +212,7 @@ export const ReadingChart: React.FC = () => {
           </div>
         </div>
 
-        <div className="text-right">
+        <div className="text-right flex flex-col items-end shrink-0">
           <span className="text-xs text-content-muted block font-medium">
             {isSelectedDayToday ? "Total Today" : "Total for Day"}
           </span>
@@ -356,31 +356,25 @@ export const ReadingChart: React.FC = () => {
         })}
       </div>
 
-      {/* Legend & Note */}
-      <div className="pt-2 border-t border-surface-border flex flex-wrap items-center justify-between gap-2 text-[11px] text-content-muted">
-        <div className="flex items-center gap-1.5">
-          <Info className="w-3.5 h-3.5 text-content-muted shrink-0" />
-          <span>Timer tracks duration actively as Quran audio plays</span>
+      {/* Legend */}
+      <div className="pt-2 border-t border-surface-border flex items-center justify-end gap-2 text-[11px] text-content-muted">
+        <span>Less</span>
+        <div className="flex gap-1 items-center">
+          <span className="w-3 h-3 rounded bg-surface-subtle border border-surface-border inline-block" />
+          <span
+            className="w-3 h-3 rounded inline-block"
+            style={{ backgroundColor: "rgba(var(--color-primary-rgb), 0.25)" }}
+          />
+          <span
+            className="w-3 h-3 rounded inline-block"
+            style={{ backgroundColor: "rgba(var(--color-primary-rgb), 0.6)" }}
+          />
+          <span
+            className="w-3 h-3 rounded inline-block"
+            style={{ backgroundColor: "var(--color-primary)" }}
+          />
         </div>
-        <div className="flex items-center gap-2">
-          <span>Less</span>
-          <div className="flex gap-1 items-center">
-            <span className="w-3 h-3 rounded bg-surface-subtle border border-surface-border inline-block" />
-            <span
-              className="w-3 h-3 rounded inline-block"
-              style={{ backgroundColor: "rgba(var(--color-primary-rgb), 0.25)" }}
-            />
-            <span
-              className="w-3 h-3 rounded inline-block"
-              style={{ backgroundColor: "rgba(var(--color-primary-rgb), 0.6)" }}
-            />
-            <span
-              className="w-3 h-3 rounded inline-block"
-              style={{ backgroundColor: "var(--color-primary)" }}
-            />
-          </div>
-          <span>More</span>
-        </div>
+        <span>More</span>
       </div>
     </div>
   );
