@@ -1,6 +1,5 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
 import React, { useState, useEffect, useRef } from "react";
 import { useApp } from "../context/AppContext";
 import { formatAudioTime, formatHeroTimer } from "../lib/utils";
@@ -218,7 +217,6 @@ export const JuzDisplay: React.FC = () => {
 
             {/* 1.2 DROPDOWN MENU FOR ALL 30 JUZS */}
             {isDropdownOpen && (
-              <div className="absolute left-1/2 -translate-x-1/2 mt-2 w-[90vw] max-w-sm sm:w-96 max-h-80 overflow-y-auto bg-surface-card border border-surface-border rounded-2xl shadow-2xl p-2 z-50 divide-y divide-surface-border">
               <div className="absolute left-1/2 -translate-x-1/2 mt-2 w-[90vw] max-w-sm sm:w-96 max-h-[60vh] sm:max-h-[460px] overflow-y-auto bg-surface-card border border-surface-border rounded-2xl shadow-2xl p-2 z-50 divide-y divide-surface-border">
                 <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-content-muted">
                   Select from 30 Quran Juz

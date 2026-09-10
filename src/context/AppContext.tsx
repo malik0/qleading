@@ -157,7 +157,6 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | null>(null);
 
-export function AppProvider({ children }: { children: ReactNode }) {
 export function AppProvider({ children }: { children: ReactNode }): React.JSX.Element {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [userState, setUserState] = useState<UserState>(INITIAL_USER_STATE);
@@ -603,7 +602,6 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
       updateStateAndPersist((prev) => {
         const existing = prev.syncPoints || [];
         // Prevent duplicate spam if saved in the same second at same position
-        if (existing.length > 0) {
         if (existing.length > 0 && !label.includes("Stopped") && !label.includes("Paused")) {
           const last = existing[0];
           if (
@@ -1541,13 +1539,10 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
         recentHistoryRef.current.shift();
       }
 
-      // Check periodic synch checkpoint every 2 minutes
       // Check periodic synch checkpoint every 5 minutes (300,000 ms)
       const currentSyncPoints = userStateRef.current.syncPoints || [];
       const lastPoint = currentSyncPoints[0];
       const lastPointTime = lastPoint ? new Date(lastPoint.timestamp).getTime() : 0;
-      if (Date.now() - lastPointTime >= 120_000) {
-        saveSyncPoint("Periodic Checkpoint");
       if (Date.now() - lastPointTime >= 300_000) {
         saveSyncPoint("Periodic Checkpoint (5m)");
       }
@@ -1707,7 +1702,6 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
     setTimeout(() => {
       isTransitioningRef.current = false;
     }, 1500);
-  }, [moveToNextJuz]);
   }, [moveToNextJuz, saveSyncPoint]);
 
   // Juz Checklist: Tap to mark done or undone

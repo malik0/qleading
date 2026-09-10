@@ -370,10 +370,8 @@ export const StreakCounter: React.FC = () => {
               >
                 {/* 4.1 Day Circle with Solid Background & Progress Bar Border */}
                 <div
-                  className={`relative w-9 h-9 sm:w-11 sm:h-11 rounded-full flex items-center justify-center select-none transition-all duration-300 ${
                   className={`relative w-9 h-9 sm:w-11 sm:h-11 rounded-full flex items-center justify-center select-none transition-all duration-300 shrink-0 ${
                     isListenedOrCompleted
-                      ? "bg-sky-400 text-slate-950 font-extrabold shadow-md shadow-sky-400/25 scale-105"
                       ? "bg-sky-400 text-slate-950 font-extrabold shadow-md shadow-sky-400/25"
                       : item.isToday
                       ? "bg-surface-subtle text-brand-primary font-bold shadow-inner"
@@ -382,12 +380,10 @@ export const StreakCounter: React.FC = () => {
                       : "bg-surface-subtle/70 text-content-muted"
                   }`}
                 >
-                  {/* SVG Circular Border Progress Bar */}
                   <svg
                     className="absolute inset-0 w-full h-full -rotate-90 pointer-events-none"
                     viewBox="0 0 48 48"
                   >
-                    {/* Background track & fill */}
                     <circle
                       cx="24"
                       cy="24"
@@ -403,7 +399,6 @@ export const StreakCounter: React.FC = () => {
                           : "text-surface-border"
                       }
                     />
-                    {/* Progress stroke */}
                     {item.progress > 0 && !isListenedOrCompleted && (
                       <circle
                         cx="24"
@@ -420,7 +415,6 @@ export const StreakCounter: React.FC = () => {
                     )}
                   </svg>
 
-                  {/* Date Initial (M, T, W, T, F, S, S) */}
                   <span
                     className={`relative z-10 text-xs sm:text-sm font-bold transition-all ${
                       isListenedOrCompleted
@@ -434,33 +428,6 @@ export const StreakCounter: React.FC = () => {
                   </span>
                 </div>
 
-                {/* Requirement: Little dot/circle beneath it for every Juz finished that day */}
-                {item.juzCompletedCount > 0 ? (
-                  <div
-                    className="flex items-center justify-center gap-0.5"
-                    title={`${item.juzCompletedCount} Juz finished`}
-                  >
-                    {Array.from({ length: Math.min(item.juzCompletedCount, 4) }).map((_, dotIdx) => (
-                      <span
-                        key={dotIdx}
-                        className={`w-1.5 h-1.5 rounded-full ${
-                          isListenedOrCompleted
-                            ? "bg-sky-400 ring-1 ring-sky-400/30"
-                            : "bg-brand-primary ring-1 ring-brand-primary/30"
-                        }`}
-                      />
-                    ))}
-                    {item.juzCompletedCount > 4 && (
-                      <span
-                        className={`text-[9px] font-bold leading-none ${
-                          isListenedOrCompleted ? "text-sky-400" : "text-brand-primary"
-                        }`}
-                      >
-                        +{item.juzCompletedCount - 4}
-                      </span>
-                    )}
-                  </div>
-                ) : null}
                 {/* Requirement: Space for dots preserved even if none */}
                 <div
                   className="h-3.5 flex items-center justify-center gap-0.5 shrink-0"
@@ -492,7 +459,6 @@ export const StreakCounter: React.FC = () => {
                 </div>
 
                 {/* Date number */}
-                <span className="text-[10px] sm:text-[11px] font-mono text-content-muted">
                 <span className="text-[10px] sm:text-[11px] font-mono text-content-muted leading-none shrink-0">
                   {item.dayNum}
                 </span>
