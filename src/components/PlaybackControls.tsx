@@ -10,6 +10,7 @@ import {
   SkipBack,
   SkipForward,
   RefreshCw,
+  History,
 } from "lucide-react";
 
 const SPEEDS: PlaybackSpeed[] = [0.5, 1.0, 1.25, 1.5, 1.75, 2.0];
@@ -26,6 +27,7 @@ export const PlaybackControls: React.FC = () => {
     playbackSpeed,
     setSpeed,
     settings,
+    openRollBack,
   } = useApp();
 
   return (
@@ -39,7 +41,7 @@ export const PlaybackControls: React.FC = () => {
       )}
 
       {/* Main Playback Buttons */}
-      <div className="flex items-center justify-center gap-2.5 sm:gap-6">
+      <div className="flex items-center justify-center gap-2 sm:gap-4 md:gap-6">
         {/* Reset Track Button (Requirement 2.1.2) */}
         <button
           onClick={resetTrack}
@@ -98,6 +100,16 @@ export const PlaybackControls: React.FC = () => {
           <span className="text-[9px] sm:text-[10px] font-mono text-brand-primary font-bold">
             +{settings.forwardStepSeconds}s
           </span>
+        </button>
+
+        {/* Roll Back Button (on the far right) */}
+        <button
+          onClick={openRollBack}
+          title="Roll Back - Revert to saved synch points or undo accidental actions"
+          className="p-2.5 sm:p-3 rounded-xl sm:rounded-2xl bg-surface-subtle hover:bg-surface-hover border border-surface-border text-content-secondary hover:text-content-primary transition group flex flex-col items-center gap-1 shadow-sm shrink-0"
+        >
+          <History className="w-4 h-4 sm:w-5 sm:h-5 group-hover:-rotate-45 transition duration-200 text-brand-primary" />
+          <span className="text-[9px] sm:text-[10px] text-content-muted font-medium">Roll Back</span>
         </button>
       </div>
 

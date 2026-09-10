@@ -132,6 +132,7 @@ export async function POST(req: Request) {
         completedJuzs: clientState.completedJuzs || [],
         juzTally: clientState.juzTally || 0,
         khatmPlan: clientState.khatmPlan || body.settings?.khatmPlan || null,
+        syncPoints: clientState.syncPoints || [],
       };
       const settingsJson = JSON.stringify(settingsPayload);
 
@@ -167,6 +168,7 @@ export async function POST(req: Request) {
           activeDeviceId: clientDeviceId,
           isPlaying: clientIsPlaying,
         },
+        settings: settingsPayload,
       });
     }
 
@@ -200,15 +202,22 @@ export async function POST(req: Request) {
     let resolvedActiveDeviceId: string | null = serverActiveDeviceId;
     let resolvedIsPlaying: number = existingRow.is_playing || 0;
 
+    const isExplicitSync: boolean = body.action === "sync" || body.action === "manualSync";
+
     if (isStartingPlayback) {
       // 1. User clicked Play: Claim active playback lease for clientDeviceId
       resolvedActiveDeviceId = clientDeviceId || null;
       resolvedIsPlaying = 1;
       resolvedUpdatedAt = nowIso;
 
-      // If server state was updated more recently from another device, use the server's
-      // latest playback position so the user picks up right where the other device left off.
-      if (serverUpdatedAtMs > clientTime && existingRow.playback_position_seconds > 0) {
+      // If server has saved progress, adopt the cloud's playback position and track so user picks up where left off
+      // Only adopt server position if server timestamp is newer than client timestamp and client has no intentional track state
+      const isClientFresh = (clientState.playbackPositionSeconds || 0) === 0 && (!clientState.currentJuzId || clientState.currentJuzId === 1);
+      const isServerNewer = serverUpdatedAtMs > clientTime;
+      if (
+        (existingRow.playback_position_seconds > 0 || (existingRow.current_juz_id && existingRow.current_juz_id > 1)) &&
+        ((isClientFresh && serverUpdatedAtMs >= clientTime) || (serverActiveDeviceId !== clientDeviceId && isServerNewer))
+      ) {
         resolvedJuzId = existingRow.current_juz_id || 1;
         resolvedPosition = existingRow.playback_position_seconds || 0;
         resolvedTimerSeconds = existingRow.timer_seconds || 1800;
@@ -221,6 +230,16 @@ export async function POST(req: Request) {
         resolvedTargetMinutes = clientState.timerTargetMinutes ?? existingRow.timer_target_minutes ?? 30;
         resolvedLastActive = clientState.lastActiveDate || existingRow.last_active_date;
       }
+    } else if (isExplicitSync) {
+      // 2. User clicked Sync button: Behave EXACTLY like Play button's pre-playback sync!
+      // Synchronize with the cloud's authoritative track, position, timer, and active date from D1
+      resolvedJuzId = existingRow.current_juz_id || clientState.currentJuzId || 1;
+      resolvedPosition = existingRow.playback_position_seconds ?? clientState.playbackPositionSeconds ?? 0;
+      resolvedTimerSeconds = existingRow.timer_seconds ?? clientState.timerSeconds ?? 1800;
+      resolvedTargetMinutes = existingRow.timer_target_minutes ?? clientState.timerTargetMinutes ?? 30;
+      resolvedLastActive = existingRow.last_active_date || clientState.lastActiveDate;
+      resolvedUpdatedAt = existingRow.updated_at || nowIso;
+      resolvedIsPlaying = existingRow.is_playing || 0;
     } else if (
       isServerPlaybackActive &&
       clientDeviceId &&
@@ -228,7 +247,7 @@ export async function POST(req: Request) {
       clientDeviceId !== serverActiveDeviceId &&
       !clientIsPlaying
     ) {
-      // 2. Another device is actively playing!
+      // 3. Another device is actively playing!
       // Stale idle/paused background sync from this device MUST NOT overwrite active playback.
       // Merge history and logs, but preserve active device's playback position and track.
       resolvedJuzId = existingRow.current_juz_id || 1;
@@ -240,7 +259,7 @@ export async function POST(req: Request) {
       resolvedActiveDeviceId = serverActiveDeviceId;
       resolvedIsPlaying = 1;
     } else if (clientIsPlaying) {
-      // 3. This device is actively playing (periodic progress sync)
+      // 4. This device is actively playing (periodic progress sync)
       resolvedActiveDeviceId = clientDeviceId || null;
       resolvedIsPlaying = 1;
       resolvedUpdatedAt = nowIso;
@@ -250,7 +269,7 @@ export async function POST(req: Request) {
       resolvedTargetMinutes = clientState.timerTargetMinutes ?? existingRow.timer_target_minutes ?? 30;
       resolvedLastActive = clientState.lastActiveDate || existingRow.last_active_date;
     } else {
-      // 4. Normal paused or idle sync
+      // 5. Normal paused or idle sync
       if (body.action === "pause" || clientIsPlaying === false) {
         if (!serverActiveDeviceId || serverActiveDeviceId === clientDeviceId) {
           resolvedIsPlaying = 0;
@@ -306,13 +325,35 @@ export async function POST(req: Request) {
       resolvedKhatm = sTime >= cTime ? serverKhatm : clientKhatm;
     }
 
-    const settingsPayload = {
-      ...existingSettings,
-      ...(body.settings || {}),
-      completedJuzs: resolvedCompletedJuzs,
-      juzTally: resolvedJuzTally,
-      khatmPlan: resolvedKhatm,
-    };
+    // Merge syncPoints:
+    const clientSyncPoints = clientState.syncPoints || [];
+    const existingSyncPoints = existingSettings.syncPoints || [];
+    const syncPointMap = new Map<string, any>();
+    existingSyncPoints.forEach((sp: any) => syncPointMap.set(sp.id, sp));
+    clientSyncPoints.forEach((sp: any) => syncPointMap.set(sp.id, sp));
+    const resolvedSyncPoints = Array.from(syncPointMap.values())
+      .sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, 50);
+
+    // When explicitly syncing, D1 database settings take precedence over local device defaults.
+    // When updating settings, the client's updated settings take precedence and update D1.
+    const settingsPayload = isExplicitSync
+      ? {
+          ...(body.settings || {}),
+          ...existingSettings,
+          completedJuzs: resolvedCompletedJuzs,
+          juzTally: resolvedJuzTally,
+          khatmPlan: resolvedKhatm,
+          syncPoints: resolvedSyncPoints,
+        }
+      : {
+          ...existingSettings,
+          ...(body.settings || {}),
+          completedJuzs: resolvedCompletedJuzs,
+          juzTally: resolvedJuzTally,
+          khatmPlan: resolvedKhatm,
+          syncPoints: resolvedSyncPoints,
+        };
     const settingsJson = JSON.stringify(settingsPayload);
 
     // Save reconciled state into Cloudflare D1
@@ -364,11 +405,13 @@ export async function POST(req: Request) {
       completedJuzs: resolvedCompletedJuzs,
       juzTally: resolvedJuzTally,
       khatmPlan: resolvedKhatm,
+      syncPoints: resolvedSyncPoints,
     };
 
     return NextResponse.json({
       success: true,
       remoteState: resolvedState,
+      settings: settingsPayload,
     });
   } catch (error: any) {
     console.error("Sync POST error:", error);
@@ -453,9 +496,10 @@ export async function GET(req: Request) {
       completedJuzs: parsedSettings.completedJuzs || [],
       juzTally: parsedSettings.juzTally || 0,
       khatmPlan: parsedSettings.khatmPlan || null,
+      syncPoints: parsedSettings.syncPoints || [],
     };
 
-    return NextResponse.json({ success: true, state });
+    return NextResponse.json({ success: true, state, settings: parsedSettings });
   } catch (error: any) {
     console.error("Sync GET error:", error);
     return NextResponse.json(

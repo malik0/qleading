@@ -1,4 +1,4 @@
-import { AppSettings, DayReadingRecord, UserLogEntry, UserState } from "../types/quran";
+import { AppSettings, DayReadingRecord, SyncPoint, UserLogEntry, UserState } from "../types/quran";
 import { getLocalDateString } from "./utils";
 
 const STATE_KEY = "qleading_state_v1";
@@ -34,6 +34,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   customJuzNames: {},
   customJuzRanges: {},
   khatmPlan: null,
+  enableBackToTop: true,
 };
 
 export const INITIAL_USER_STATE: UserState = {
@@ -54,6 +55,7 @@ export const INITIAL_USER_STATE: UserState = {
   completedJuzs: [],
   juzTally: 0,
   khatmPlan: null,
+  syncPoints: [],
 };
 
 export function getStoredSettings(): AppSettings {
@@ -83,6 +85,27 @@ export function saveStoredSettings(settings: AppSettings): void {
   }
 }
 
+/**
+ * Merges local and remote settings cleanly, with DEFAULT_SETTINGS as base fallback
+ */
+export function reconcileSettings(local: AppSettings, remote?: Partial<AppSettings> | null): AppSettings {
+  if (!remote) return local;
+  return {
+    ...DEFAULT_SETTINGS,
+    ...local,
+    ...remote,
+    customJuzNames: {
+      ...(local.customJuzNames || {}),
+      ...(remote.customJuzNames || {}),
+    },
+    customJuzRanges: {
+      ...(local.customJuzRanges || {}),
+      ...(remote.customJuzRanges || {}),
+    },
+    khatmPlan: remote.khatmPlan !== undefined ? remote.khatmPlan : local.khatmPlan,
+  };
+}
+
 export function getStoredState(): UserState {
   if (typeof window === "undefined") return INITIAL_USER_STATE;
   try {
@@ -90,11 +113,13 @@ export function getStoredState(): UserState {
     if (!raw) return INITIAL_USER_STATE;
     const parsed = JSON.parse(raw);
     const completedJuzs = parsed.completedJuzs || [];
+    const syncPoints = parsed.syncPoints || [];
     return {
       ...INITIAL_USER_STATE,
       streakTargetMinutes: parsed.streakTargetMinutes ?? parsed.timerTargetMinutes ?? INITIAL_USER_STATE.streakTargetMinutes,
       completedJuzs,
       juzTally: parsed.juzTally ?? completedJuzs.length,
+      syncPoints,
       ...parsed,
     };
   } catch (e) {
@@ -110,6 +135,53 @@ export function saveStoredState(state: UserState): void {
   } catch (e) {
     console.error("Failed to save state to storage:", e);
   }
+}
+
+/**
+ * Merges local and remote DayReadingRecord dictionaries cleanly
+ */
+export function mergeHistoryRecords(
+  local: Record<string, DayReadingRecord> = {},
+  remote: Record<string, DayReadingRecord> = {}
+): Record<string, DayReadingRecord> {
+  const mergedHistory: Record<string, DayReadingRecord> = {
+    ...local,
+    ...remote,
+  };
+
+  for (const date in local) {
+    if (remote[date]) {
+      const locDay = local[date];
+      const remDay = remote[date];
+      const combinedSlots: Record<number, number> = { ...(remDay.slots || {}) };
+      for (const slot in locDay.slots || {}) {
+        const sNum = Number(slot);
+        combinedSlots[sNum] = Math.max(combinedSlots[sNum] || 0, locDay.slots[sNum] || 0);
+      }
+      const combinedCompletedJuzIds = Array.from(
+        new Set([
+          ...(locDay.completedJuzIds || []),
+          ...(remDay.completedJuzIds || []),
+        ])
+      );
+      const combinedJuzCompletedCount = Math.max(
+        locDay.juzCompletedCount || 0,
+        remDay.juzCompletedCount || 0,
+        combinedCompletedJuzIds.length
+      );
+
+      mergedHistory[date] = {
+        date,
+        secondsRead: Math.max(locDay.secondsRead || 0, remDay.secondsRead || 0),
+        targetReached: Boolean(locDay.targetReached || remDay.targetReached || combinedJuzCompletedCount > 0),
+        slots: combinedSlots,
+        juzCompletedCount: combinedJuzCompletedCount,
+        completedJuzIds: combinedCompletedJuzIds,
+      };
+    }
+  }
+
+  return mergedHistory;
 }
 
 /**
@@ -158,43 +230,7 @@ export function reconcileStates(local: UserState, remote: UserState): UserState 
   }
 
   // Merge history records and user logs so data from either device is preserved
-  const mergedHistory: Record<string, DayReadingRecord> = {
-    ...local.historyRecords,
-    ...remote.historyRecords,
-  };
-
-  // Combine day slots for matching days
-  for (const date in local.historyRecords) {
-    if (remote.historyRecords[date]) {
-      const locDay = local.historyRecords[date];
-      const remDay = remote.historyRecords[date];
-      const combinedSlots: Record<number, number> = { ...locDay.slots };
-      for (const slot in remDay.slots) {
-        const sNum = Number(slot);
-        combinedSlots[sNum] = Math.max(combinedSlots[sNum] || 0, remDay.slots[sNum] || 0);
-      }
-      const combinedCompletedJuzIds = Array.from(
-        new Set([
-          ...(locDay.completedJuzIds || []),
-          ...(remDay.completedJuzIds || []),
-        ])
-      );
-      const combinedJuzCompletedCount = Math.max(
-        locDay.juzCompletedCount || 0,
-        remDay.juzCompletedCount || 0,
-        combinedCompletedJuzIds.length
-      );
-
-      mergedHistory[date] = {
-        date,
-        secondsRead: Math.max(locDay.secondsRead, remDay.secondsRead),
-        targetReached: locDay.targetReached || remDay.targetReached || combinedJuzCompletedCount > 0,
-        slots: combinedSlots,
-        juzCompletedCount: combinedJuzCompletedCount,
-        completedJuzIds: combinedCompletedJuzIds,
-      };
-    }
-  }
+  const mergedHistory = mergeHistoryRecords(local.historyRecords || {}, remote.historyRecords || {});
 
   // Deduplicate user logs by ID
   const logMap = new Map<string, UserLogEntry>();
@@ -228,6 +264,14 @@ export function reconcileStates(local: UserState, remote: UserState): UserState 
     }
   }
 
+  // Deduplicate sync points by ID, sort newest first, max 50
+  const syncPointMap = new Map<string, SyncPoint>();
+  (local.syncPoints || []).forEach((sp) => syncPointMap.set(sp.id, sp));
+  (remote.syncPoints || []).forEach((sp) => syncPointMap.set(sp.id, sp));
+  const mergedSyncPoints = Array.from(syncPointMap.values())
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+    .slice(0, 50);
+
   return {
     ...base,
     ...authIdentity,
@@ -236,6 +280,7 @@ export function reconcileStates(local: UserState, remote: UserState): UserState 
     completedJuzs: mergedCompletedJuzs,
     juzTally: mergedTally,
     khatmPlan: mergedKhatm,
+    syncPoints: mergedSyncPoints,
   };
 }
 

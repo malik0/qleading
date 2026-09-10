@@ -42,6 +42,7 @@ export interface AppSettings {
   customJuzNames: Record<number, string>;
   customJuzRanges: Record<number, string>;
   khatmPlan?: KhatmPlan | null;
+  enableBackToTop?: boolean;
 }
 
 export interface KhatmPlan {
@@ -78,6 +79,36 @@ export interface UserLogEntry {
   action: 'listen' | 'complete_juz' | 'target_reached';
 }
 
+export interface SyncPoint {
+  id: string;
+  timestamp: string; // ISO string
+  juzId: number;
+  juzName: string;
+  playbackPositionSeconds: number; // audiofile position in seconds
+  audioDurationSeconds?: number;
+  timerSeconds: number; // Big Timer value in seconds
+  timerTargetMinutes?: number;
+  label?: string; // e.g. "Manual Sync", "Auto Sync", "Pre-Play Sync", "Checkpoint", "Pause"
+}
+
+export interface AccidentRecord {
+  timestamp: number; // Date.now()
+  actionType: "reset_track" | "switch_juz" | "seek_jump" | "timer_reset" | "manual";
+  description: string;
+  beforeState: {
+    juzId: number;
+    juzName: string;
+    playbackPositionSeconds: number;
+    timerSeconds: number;
+  };
+  fifteenSecBeforeState: {
+    juzId: number;
+    juzName: string;
+    playbackPositionSeconds: number;
+    timerSeconds: number;
+  };
+}
+
 export interface UserState {
   userId: string;
   userName: string;
@@ -97,6 +128,7 @@ export interface UserState {
   completedJuzs?: number[]; // List of completed Juz IDs (1-30)
   juzTally?: number; // Total completed Juz count
   khatmPlan?: KhatmPlan | null;
+  syncPoints?: SyncPoint[];
 }
 
 export interface SyncPayload {
@@ -119,6 +151,7 @@ export interface AuthResponse {
   success: boolean;
   user?: AuthUser;
   state?: UserState;
+  settings?: AppSettings;
   token?: string;
   message?: string;
   error?: string;

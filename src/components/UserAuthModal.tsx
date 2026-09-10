@@ -22,7 +22,9 @@ import {
   AlertCircle,
   Database,
   Trash2,
+  History,
 } from "lucide-react";
+import { RollBackContent } from "./RollBackModal";
 
 interface UserAuthModalProps {
   isOpen: boolean;
@@ -44,10 +46,11 @@ export const UserAuthModal: React.FC<UserAuthModalProps> = ({
     isSyncing,
     lastSynced,
     manualSync,
+    syncPoints,
   } = useApp();
 
   // Navigation tabs
-  const [activeTab, setActiveTab] = useState<"auth" | "logs">("auth");
+  const [activeTab, setActiveTab] = useState<"auth" | "rollback" | "logs">("auth");
   const [unauthMode, setUnauthMode] = useState<"random" | "login" | "register">("random");
 
   // Form inputs for login / register
@@ -254,6 +257,17 @@ export const UserAuthModal: React.FC<UserAuthModalProps> = ({
             {userState.isLoggedIn ? "Account Details" : "Sign In & Sync"}
           </button>
           <button
+            onClick={() => setActiveTab("rollback")}
+            className={`py-2.5 sm:py-3 px-3 sm:px-4 text-xs sm:text-sm font-semibold border-b-2 transition flex items-center gap-1.5 ${
+              activeTab === "rollback"
+                ? "border-brand-primary text-brand-primary"
+                : "border-transparent text-content-muted hover:text-content-primary"
+            }`}
+          >
+            <History className="w-4 h-4" />
+            Roll Back ({syncPoints.length})
+          </button>
+          <button
             onClick={() => setActiveTab("logs")}
             className={`py-2.5 sm:py-3 px-3 sm:px-4 text-xs sm:text-sm font-semibold border-b-2 transition flex items-center gap-1.5 ${
               activeTab === "logs"
@@ -337,6 +351,28 @@ export const UserAuthModal: React.FC<UserAuthModalProps> = ({
                   <p className="text-content-muted leading-relaxed">
                     Audio position and reading timer are automatically synced to Cloudflare D1 whenever you pause, change Juz, or switch devices.
                   </p>
+                </div>
+
+                {/* Roll Back & Synch Points Quick Section */}
+                <div className="p-4 rounded-2xl bg-surface-subtle border border-surface-border flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-brand-light flex items-center justify-center text-brand-primary shrink-0">
+                      <History className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h5 className="text-sm font-bold text-content-primary">Roll Back & Synch Points</h5>
+                      <p className="text-[11px] text-content-muted">
+                        {syncPoints.length} synch point{syncPoints.length === 1 ? "" : "s"} saved • Undo accidental resets or jumps
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("rollback")}
+                    className="text-xs text-brand-primary hover:text-brand-hover bg-brand-light/50 hover:bg-brand-light px-3 py-1.5 rounded-xl border border-brand-primary/20 transition font-semibold shrink-0"
+                  >
+                    View Points
+                  </button>
                 </div>
 
                 {/* RESET / UPDATE ACCOUNT DETAILS FORM */}
@@ -674,6 +710,8 @@ export const UserAuthModal: React.FC<UserAuthModalProps> = ({
 
               </div>
             )
+          ) : activeTab === "rollback" ? (
+            <RollBackContent onRollbackComplete={onClose} />
           ) : (
             /* CHRONOLOGICAL USER LOGS */
             <div className="space-y-3">
@@ -690,7 +728,7 @@ export const UserAuthModal: React.FC<UserAuthModalProps> = ({
               ) : (
                 <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
                   {userLogs.map((log) => {
-                    const dateFormatted = new Date(log.timestamp).toLocaleString();
+                    const dateFormatted = new Date(log.timestamp).toLocaleString("en-US");
 
                     return (
                       <div

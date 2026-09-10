@@ -11,11 +11,13 @@ import React, {
 } from "react";
 import {
   AccountResetPayload,
+  AccidentRecord,
   AppSettings,
   DayReadingRecord,
   JuzInfo,
   KhatmPlan,
   PlaybackSpeed,
+  SyncPoint,
   ThemeColor,
   ThemeMode,
   TimerMode,
@@ -31,9 +33,11 @@ import {
   saveStoredSettings,
   saveStoredState,
   reconcileStates,
+  reconcileSettings,
+  mergeHistoryRecords,
   getDeviceId,
 } from "../lib/storage";
-import { getLocalDateString, getSlotIndexForDate } from "../lib/utils";
+import { getLocalDateString, getSlotIndexForDate, formatHeroTimer } from "../lib/utils";
 
 function isSameAudioUrl(src1?: string | null, src2?: string | null): boolean {
   if (!src1 || !src2) return false;
@@ -81,6 +85,7 @@ interface AppContextType {
   timerMode: TimerMode;
   isTimerRunning: boolean;
   resetTimer: () => void;
+  setTimerSeconds: (seconds: number) => void;
   adjustTimerDefault: (minutes: number, resetCurrent?: boolean) => void;
   setTimerMode: (mode: TimerMode, resetCurrent?: boolean) => void;
 
@@ -136,11 +141,24 @@ interface AppContextType {
   lastSynced: string | null;
   manualSync: () => Promise<void>;
   syncNotice: string | null;
+
+  // Roll Back & Synch Points
+  syncPoints: SyncPoint[];
+  saveSyncPoint: (label?: string) => void;
+  rollbackToSyncPoint: (point: SyncPoint) => void;
+  rollbackToAccidentFifteenSeconds: () => void;
+  lastAccident: AccidentRecord | null;
+  isLastSyncPointOlderThan1Min: boolean;
+  isRollBackOpen: boolean;
+  setIsRollBackOpen: (open: boolean) => void;
+  openRollBack: () => void;
+  closeRollBack: () => void;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
+export function AppProvider({ children }: { children: ReactNode }): React.JSX.Element {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [userState, setUserState] = useState<UserState>(INITIAL_USER_STATE);
   const [isClient, setIsClient] = useState(false);
@@ -160,12 +178,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSynced, setLastSynced] = useState<string | null>(null);
 
+  // Roll Back & Synch Points state
+  const [isRollBackOpen, setIsRollBackOpen] = useState(false);
+  const [lastAccident, setLastAccident] = useState<AccidentRecord | null>(null);
+  const recentHistoryRef = useRef<Array<{ time: number; juzId: number; position: number; timerSeconds: number }>>([]);
+
+  const openRollBack = useCallback(() => setIsRollBackOpen(true), []);
+  const closeRollBack = useCallback(() => setIsRollBackOpen(false), []);
+
   // References for interval tracking
   // References for interval tracking and stale-closure prevention
   const lastActiveDateRef = useRef(getLocalDateString());
   const timerSecondsRef = useRef(userState.timerSeconds);
   const playbackPosRef = useRef(0);
   const isPlayingRef = useRef(false);
+  const isTransitioningRef = useRef(false);
   const userStateRef = useRef(userState);
   const settingsRef = useRef(settings);
 
@@ -213,6 +240,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
         audioRef.current.playbackRate = loadedSettings.defaultPlaybackSpeed;
       }
     }
+    if (!loadedState.syncPoints || loadedState.syncPoints.length === 0) {
+      const initJuz = INITIAL_JUZ_LIST.find((j) => j.id === (loadedState.currentJuzId || 1)) || INITIAL_JUZ_LIST[0];
+      const initialPoint: SyncPoint = {
+        id: "sp_init_" + Date.now(),
+        timestamp: new Date().toISOString(),
+        juzId: loadedState.currentJuzId || 1,
+        juzName: initJuz.customName || initJuz.defaultName,
+        playbackPositionSeconds: loadedState.playbackPositionSeconds || 0,
+        audioDurationSeconds: initJuz.approxDurationSeconds || 3300,
+        timerSeconds: loadedState.timerSeconds || 1800,
+        timerTargetMinutes: loadedSettings.timerTargetMinutes || 30,
+        label: "Initial Session",
+      };
+      loadedState.syncPoints = [initialPoint];
+      saveStoredState(loadedState);
+    }
+
     setUserState(loadedState);
     userStateRef.current = loadedState;
     settingsRef.current = loadedSettings;
@@ -226,14 +270,76 @@ export function AppProvider({ children }: { children: ReactNode }) {
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data?.authenticated && data?.state) {
-          const merged = reconcileStates(loadedState, data.state);
-          setUserState(merged);
-          userStateRef.current = merged;
-          saveStoredState(merged);
-          if (merged.playbackPositionSeconds > 0) {
-            setPlaybackPosition(merged.playbackPositionSeconds);
-            playbackPosRef.current = merged.playbackPositionSeconds;
+          const targetPos = data.state.playbackPositionSeconds || 0;
+          const targetJuzId = data.state.currentJuzId || 1;
+
+          const mergedHistory = mergeHistoryRecords(
+            loadedState.historyRecords || {},
+            data.state.historyRecords || {}
+          );
+          const mergedLogs = [
+            ...(data.state.userLogs || []),
+            ...(loadedState.userLogs || []),
+          ].filter((log, idx, arr) => arr.findIndex((l) => l.id === log.id) === idx);
+
+          const mergedCompletedJuzs = Array.from(
+            new Set([
+              ...(loadedState.completedJuzs || []),
+              ...(data.state.completedJuzs || []),
+            ])
+          ).sort((a, b) => a - b);
+
+          const mergedSyncPoints = Array.from(
+            new Map<string, SyncPoint>([
+              ...(loadedState.syncPoints || []).map((sp: SyncPoint) => [sp.id, sp] as [string, SyncPoint]),
+              ...((data.state.syncPoints || []) as SyncPoint[]).map((sp: SyncPoint) => [sp.id, sp] as [string, SyncPoint]),
+            ]).values()
+          )
+            .sort((a: SyncPoint, b: SyncPoint) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+            .slice(0, 50);
+
+          const syncedState: UserState = {
+            ...loadedState,
+            ...data.state,
+            currentJuzId: targetJuzId,
+            playbackPositionSeconds: targetPos,
+            historyRecords: mergedHistory,
+            userLogs: mergedLogs,
+            completedJuzs: mergedCompletedJuzs,
+            syncPoints: mergedSyncPoints,
+          };
+
+          setUserState(syncedState);
+          userStateRef.current = syncedState;
+          saveStoredState(syncedState);
+
+          if (targetJuzId !== loadedState.currentJuzId) {
+            const targetJuz = INITIAL_JUZ_LIST.find((j) => j.id === targetJuzId) || INITIAL_JUZ_LIST[0];
+            const targetUrl = getAudioUrlForJuz(targetJuz);
+            if (audioRef.current && !isSameAudioUrl(audioRef.current.src, targetUrl)) {
+              audioRef.current.src = targetUrl;
+            }
           }
+
+          if (audioRef.current && targetPos > 0) {
+            audioRef.current.currentTime = targetPos;
+          }
+          setPlaybackPosition(targetPos);
+          playbackPosRef.current = targetPos;
+
+          if (data.settings) {
+            const mergedSettings = reconcileSettings(loadedSettings, data.settings);
+            setSettings(mergedSettings);
+            settingsRef.current = mergedSettings;
+            saveStoredSettings(mergedSettings);
+            if (mergedSettings.defaultPlaybackSpeed) {
+              setPlaybackSpeedState(mergedSettings.defaultPlaybackSpeed);
+              if (audioRef.current) {
+                audioRef.current.playbackRate = mergedSettings.defaultPlaybackSpeed;
+              }
+            }
+          }
+
           setLastSynced(new Date().toLocaleTimeString());
         }
       })
@@ -271,8 +377,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // Update Settings
   const updateSettings = useCallback((partial: Partial<AppSettings>) => {
+    let nextSettings: AppSettings = settingsRef.current;
     setSettings((prev) => {
       const next = { ...prev, ...partial };
+      nextSettings = next;
+      settingsRef.current = next;
       saveStoredSettings(next);
       return next;
     });
@@ -281,6 +390,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (audioRef.current) {
         audioRef.current.playbackRate = partial.defaultPlaybackSpeed;
       }
+    }
+
+    // Persist settings into database if user is logged in
+    if (userStateRef.current.isLoggedIn) {
+      fetch("/api/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          state: userStateRef.current,
+          settings: { ...settingsRef.current, ...partial },
+          deviceId: getDeviceId(),
+          isPlaying: isPlayingRef.current,
+          action: "updateSettings",
+        }),
+      }).catch((err) => console.warn("Settings sync offline/failed:", err));
     }
   }, []);
 
@@ -392,6 +516,221 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } catch {}
   }, []);
 
+  // Record accidental user actions and compute state 15 seconds before the accident
+  const recordAccident = useCallback(
+    (
+      type: "reset_track" | "switch_juz" | "seek_jump" | "timer_reset" | "manual",
+      desc: string
+    ) => {
+      const now = Date.now();
+      const currentJuzId = userStateRef.current.currentJuzId;
+      const curJuz = INITIAL_JUZ_LIST.find((j) => j.id === currentJuzId) || INITIAL_JUZ_LIST[0];
+      const curName = curJuz.customName || curJuz.defaultName;
+      const curPos = playbackPosRef.current;
+      const curTimer = timerSecondsRef.current;
+
+      // Find entry in recent history from 15 seconds ago (now - 15000)
+      const targetTime = now - 15000;
+      let fifteenState = {
+        juzId: currentJuzId,
+        juzName: curName,
+        playbackPositionSeconds: Math.max(0, curPos - 15),
+        timerSeconds: curTimer + 15,
+      };
+
+      const history = recentHistoryRef.current;
+      if (history.length > 0) {
+        let closest = history[0];
+        let minDiff = Math.abs(history[0].time - targetTime);
+        for (let i = 1; i < history.length; i++) {
+          const diff = Math.abs(history[i].time - targetTime);
+          if (diff < minDiff) {
+            minDiff = diff;
+            closest = history[i];
+          }
+        }
+        if (minDiff < 10000) {
+          const matchJuz = INITIAL_JUZ_LIST.find((j) => j.id === closest.juzId) || INITIAL_JUZ_LIST[0];
+          fifteenState = {
+            juzId: closest.juzId,
+            juzName: matchJuz.customName || matchJuz.defaultName,
+            playbackPositionSeconds: closest.position,
+            timerSeconds: closest.timerSeconds,
+          };
+        }
+      }
+
+      const record: AccidentRecord = {
+        timestamp: now,
+        actionType: type,
+        description: desc,
+        beforeState: {
+          juzId: currentJuzId,
+          juzName: curName,
+          playbackPositionSeconds: curPos,
+          timerSeconds: curTimer,
+        },
+        fifteenSecBeforeState: fifteenState,
+      };
+      setLastAccident(record);
+    },
+    []
+  );
+
+  // Save a new synch point checkpoint
+  const saveSyncPoint = useCallback(
+    (label: string = "Checkpoint") => {
+      const nowIso = new Date().toISOString();
+      const curJuzId = userStateRef.current.currentJuzId;
+      const curJuz = INITIAL_JUZ_LIST.find((j) => j.id === curJuzId) || INITIAL_JUZ_LIST[0];
+      const name = curJuz.customName || curJuz.defaultName;
+      const pos = playbackPosRef.current;
+      const timer = timerSecondsRef.current;
+      const dur = audioRef.current?.duration || curJuz.approxDurationSeconds || 3300;
+
+      const newPoint: SyncPoint = {
+        id: "sp_" + Date.now() + "_" + Math.random().toString(36).substring(2, 7),
+        timestamp: nowIso,
+        juzId: curJuzId,
+        juzName: name,
+        playbackPositionSeconds: Math.floor(pos),
+        audioDurationSeconds: Math.floor(dur),
+        timerSeconds: timer,
+        timerTargetMinutes: settingsRef.current.timerTargetMinutes,
+        label,
+      };
+
+      updateStateAndPersist((prev) => {
+        const existing = prev.syncPoints || [];
+        // Prevent duplicate spam if saved in the same second at same position
+        if (existing.length > 0) {
+        if (existing.length > 0 && !label.includes("Stopped") && !label.includes("Paused")) {
+          const last = existing[0];
+          if (
+            last.juzId === curJuzId &&
+            Math.abs(last.playbackPositionSeconds - pos) < 2 &&
+            Math.abs(new Date(last.timestamp).getTime() - Date.now()) < 3000
+          ) {
+            return prev;
+          }
+        }
+        return {
+          ...prev,
+          syncPoints: [newPoint, ...existing].slice(0, 50),
+        };
+      });
+    },
+    [updateStateAndPersist]
+  );
+
+  // Revert back to a chosen synch point
+  const rollbackToSyncPoint = useCallback(
+    (point: SyncPoint) => {
+      const targetJuzId = point.juzId;
+      const targetPos = point.playbackPositionSeconds;
+      const targetTimer = point.timerSeconds;
+      const targetJuz = INITIAL_JUZ_LIST.find((j) => j.id === targetJuzId) || INITIAL_JUZ_LIST[0];
+      const targetUrl = getAudioUrlForJuz(targetJuz);
+
+      if (targetJuzId !== userStateRef.current.currentJuzId) {
+        if (audioRef.current && !isSameAudioUrl(audioRef.current.src, targetUrl)) {
+          audioRef.current.src = targetUrl;
+        }
+      }
+
+      if (audioRef.current) {
+        audioRef.current.currentTime = targetPos;
+      }
+      setPlaybackPosition(targetPos);
+      playbackPosRef.current = targetPos;
+      timerSecondsRef.current = targetTimer;
+
+      updateStateAndPersist((s) => ({
+        ...s,
+        currentJuzId: targetJuzId,
+        playbackPositionSeconds: targetPos,
+        timerSeconds: targetTimer,
+      }));
+
+      broadcastPlayback("PAUSE", { juzId: targetJuzId, position: targetPos });
+
+      const mins = Math.floor(targetPos / 60);
+      const secs = Math.floor(targetPos % 60);
+      const posStr = `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+      setSyncNotice(`Rolled back to ${point.juzName} (${posStr}) • Big Timer ${formatHeroTimer(targetTimer)}`);
+      setTimeout(() => setSyncNotice(null), 5000);
+    },
+    [getAudioUrlForJuz, updateStateAndPersist, broadcastPlayback]
+  );
+
+  // Revert back to 15 seconds before the accident
+  const rollbackToAccidentFifteenSeconds = useCallback(() => {
+    let targetState = lastAccident?.fifteenSecBeforeState;
+    if (!targetState) {
+      const curJuzId = userStateRef.current.currentJuzId;
+      const curJuz = INITIAL_JUZ_LIST.find((j) => j.id === curJuzId) || INITIAL_JUZ_LIST[0];
+      targetState = {
+        juzId: curJuzId,
+        juzName: curJuz.customName || curJuz.defaultName,
+        playbackPositionSeconds: Math.max(0, playbackPosRef.current - 15),
+        timerSeconds: timerSecondsRef.current + 15,
+      };
+    }
+
+    const targetJuz = INITIAL_JUZ_LIST.find((j) => j.id === targetState.juzId) || INITIAL_JUZ_LIST[0];
+    const targetUrl = getAudioUrlForJuz(targetJuz);
+
+    if (targetState.juzId !== userStateRef.current.currentJuzId) {
+      if (audioRef.current && !isSameAudioUrl(audioRef.current.src, targetUrl)) {
+        audioRef.current.src = targetUrl;
+      }
+    }
+
+    if (audioRef.current) {
+      audioRef.current.currentTime = targetState.playbackPositionSeconds;
+    }
+    setPlaybackPosition(targetState.playbackPositionSeconds);
+    playbackPosRef.current = targetState.playbackPositionSeconds;
+    timerSecondsRef.current = targetState.timerSeconds;
+
+    updateStateAndPersist((s) => ({
+      ...s,
+      currentJuzId: targetState.juzId,
+      playbackPositionSeconds: targetState.playbackPositionSeconds,
+      timerSeconds: targetState.timerSeconds,
+    }));
+
+    broadcastPlayback("PAUSE", {
+      juzId: targetState.juzId,
+      position: targetState.playbackPositionSeconds,
+    });
+
+    saveSyncPoint("Rolled Back (-15s Before Accident)");
+
+    const mins = Math.floor(targetState.playbackPositionSeconds / 60);
+    const secs = Math.floor(targetState.playbackPositionSeconds % 60);
+    const posStr = `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+    setSyncNotice(
+      `Rolled back 15s before accident • ${targetState.juzName} (${posStr}) • Big Timer ${formatHeroTimer(
+        targetState.timerSeconds
+      )}`
+    );
+    setTimeout(() => setSyncNotice(null), 5000);
+  }, [
+    lastAccident,
+    getAudioUrlForJuz,
+    updateStateAndPersist,
+    broadcastPlayback,
+    saveSyncPoint,
+  ]);
+
+  // Determine if the last synch point is more than 1 minute earlier
+  const syncPoints = userState.syncPoints || [];
+  const lastSyncPoint = syncPoints[0];
+  const referenceTime = lastAccident ? lastAccident.timestamp : Date.now();
+  const isLastSyncPointOlderThan1Min =
+    !lastSyncPoint || referenceTime - new Date(lastSyncPoint.timestamp).getTime() > 60 * 1000;
+
   // Multi-tab BroadcastChannel listener
   useEffect(() => {
     if (typeof window === "undefined" || !("BroadcastChannel" in window)) return;
@@ -499,6 +838,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
             setPlaybackPosition(targetPos);
             playbackPosRef.current = targetPos;
           }
+
+          if (data.settings) {
+            const reconciledSettings = reconcileSettings(settingsRef.current, data.settings);
+            setSettings(reconciledSettings);
+            settingsRef.current = reconciledSettings;
+            saveStoredSettings(reconciledSettings);
+            if (reconciledSettings.defaultPlaybackSpeed && audioRef.current) {
+              audioRef.current.playbackRate = reconciledSettings.defaultPlaybackSpeed;
+            }
+          }
+
           setLastSynced(new Date().toLocaleTimeString());
         }
       } catch (err) {
@@ -511,23 +861,110 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const manualSync = useCallback(async () => {
-    if (userStateRef.current.isLoggedIn) {
-      await syncWithServer();
+    if (!userStateRef.current.isLoggedIn) {
+      setSyncNotice("Please log in to sync across devices");
+      setTimeout(() => setSyncNotice(null), 4000);
+      return;
     }
-    const targetSec = settingsRef.current.timerTargetMinutes * 60;
-    timerSecondsRef.current = targetSec;
-    const nextState = {
-      ...userStateRef.current,
-      timerSeconds: targetSec,
-      updatedAt: new Date().toISOString(),
-    };
-    userStateRef.current = nextState;
-    saveStoredState(nextState);
+    setIsSyncing(true);
+    try {
+      const currentState = userStateRef.current;
+      const res = await fetch("/api/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          state: currentState,
+          settings: settingsRef.current,
+          deviceId: getDeviceId(),
+          isPlaying: isPlayingRef.current,
+          action: "sync",
+        }),
+      });
 
-    if (typeof window !== "undefined") {
-      window.location.reload();
+      if (res.ok) {
+        const data = await res.json();
+        if (data.remoteState) {
+          const targetPos = data.remoteState.playbackPositionSeconds || 0;
+          const targetJuzId = data.remoteState.currentJuzId || 1;
+
+          const mergedHistory = mergeHistoryRecords(
+            currentState.historyRecords || {},
+            data.remoteState.historyRecords || {}
+          );
+          const mergedLogs = [
+            ...(data.remoteState.userLogs || []),
+            ...(currentState.userLogs || []),
+          ].filter((log, idx, arr) => arr.findIndex((l) => l.id === log.id) === idx);
+
+          const mergedCompletedJuzs = Array.from(
+            new Set([
+              ...(currentState.completedJuzs || []),
+              ...(data.remoteState.completedJuzs || []),
+            ])
+          ).sort((a, b) => a - b);
+
+          const syncedState: UserState = {
+            ...currentState,
+            ...data.remoteState,
+            currentJuzId: targetJuzId,
+            playbackPositionSeconds: targetPos,
+            historyRecords: mergedHistory,
+            userLogs: mergedLogs,
+            completedJuzs: mergedCompletedJuzs,
+          };
+
+          setUserState(syncedState);
+          userStateRef.current = syncedState;
+          saveStoredState(syncedState);
+
+          if (targetJuzId !== currentState.currentJuzId) {
+            const targetJuz = INITIAL_JUZ_LIST.find((j) => j.id === targetJuzId) || INITIAL_JUZ_LIST[0];
+            const targetUrl = getAudioUrlForJuz(targetJuz);
+            if (audioRef.current && !isSameAudioUrl(audioRef.current.src, targetUrl)) {
+              audioRef.current.src = targetUrl;
+            }
+          }
+
+          if (audioRef.current) {
+            audioRef.current.currentTime = targetPos;
+          }
+          setPlaybackPosition(targetPos);
+          playbackPosRef.current = targetPos;
+
+          const syncedTimerSec = data.remoteState.timerSeconds ?? (settingsRef.current.timerTargetMinutes * 60);
+          timerSecondsRef.current = syncedTimerSec;
+        }
+
+        if (data.settings) {
+          const reconciledSettings = reconcileSettings(settingsRef.current, data.settings);
+          setSettings(reconciledSettings);
+          settingsRef.current = reconciledSettings;
+          saveStoredSettings(reconciledSettings);
+          if (reconciledSettings.defaultPlaybackSpeed && audioRef.current) {
+            audioRef.current.playbackRate = reconciledSettings.defaultPlaybackSpeed;
+          }
+        }
+
+        const syncTime = new Date().toLocaleTimeString();
+        setLastSynced(syncTime);
+        const mins = Math.floor((data.remoteState?.playbackPositionSeconds || 0) / 60);
+        const secs = Math.floor((data.remoteState?.playbackPositionSeconds || 0) % 60);
+        const posStr = `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+        setSyncNotice(`Synced with cloud • Juz ${data.remoteState?.currentJuzId || 1} at ${posStr}`);
+        setTimeout(() => setSyncNotice(null), 5000);
+        saveSyncPoint("Manual Sync");
+      } else {
+        setSyncNotice("Sync failed. Check connection.");
+        setTimeout(() => setSyncNotice(null), 4000);
+      }
+    } catch (err) {
+      console.warn("Manual sync offline/failed:", err);
+      setSyncNotice("Sync offline. Using local cache.");
+      setTimeout(() => setSyncNotice(null), 4000);
+    } finally {
+      setIsSyncing(false);
     }
-  }, [syncWithServer]);
+  }, [getAudioUrlForJuz, saveSyncPoint]);
 
   // Periodic Heartbeat & Auto-Sync during active playback (every 10 seconds)
   useEffect(() => {
@@ -650,6 +1087,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
             setLastSynced(new Date().toLocaleTimeString());
           }
         }
+
+        if (data?.settings) {
+          const reconciledSettings = reconcileSettings(settingsRef.current, data.settings);
+          if (JSON.stringify(reconciledSettings) !== JSON.stringify(settingsRef.current)) {
+            setSettings(reconciledSettings);
+            settingsRef.current = reconciledSettings;
+            saveStoredSettings(reconciledSettings);
+            if (reconciledSettings.defaultPlaybackSpeed && audioRef.current) {
+              audioRef.current.playbackRate = reconciledSettings.defaultPlaybackSpeed;
+            }
+          }
+        }
       } catch {}
     };
 
@@ -706,13 +1155,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (res.ok) {
           const data = await res.json();
           if (data.remoteState) {
-            const reconciled = reconcileStates(currentState, data.remoteState);
-            setUserState(reconciled);
-            userStateRef.current = reconciled;
-            saveStoredState(reconciled);
+            const targetPos = data.remoteState.playbackPositionSeconds || 0;
+            const targetJuzId = data.remoteState.currentJuzId || 1;
 
-            const targetPos = reconciled.playbackPositionSeconds || 0;
-            const targetJuzId = reconciled.currentJuzId || 1;
+            const mergedHistory = mergeHistoryRecords(
+              currentState.historyRecords || {},
+              data.remoteState.historyRecords || {}
+            );
+            const mergedLogs = [
+              ...(data.remoteState.userLogs || []),
+              ...(currentState.userLogs || []),
+            ].filter((log, idx, arr) => arr.findIndex((l) => l.id === log.id) === idx);
+
+            const mergedCompletedJuzs = Array.from(
+              new Set([
+                ...(currentState.completedJuzs || []),
+                ...(data.remoteState.completedJuzs || []),
+              ])
+            ).sort((a, b) => a - b);
+
+            const syncedState: UserState = {
+              ...currentState,
+              ...data.remoteState,
+              currentJuzId: targetJuzId,
+              playbackPositionSeconds: targetPos,
+              historyRecords: mergedHistory,
+              userLogs: mergedLogs,
+              completedJuzs: mergedCompletedJuzs,
+            };
+
+            setUserState(syncedState);
+            userStateRef.current = syncedState;
+            saveStoredState(syncedState);
 
             if (targetJuzId !== currentState.currentJuzId) {
               const targetJuz = INITIAL_JUZ_LIST.find((j) => j.id === targetJuzId) || INITIAL_JUZ_LIST[0];
@@ -722,10 +1196,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
               }
             }
 
-            audioRef.current.currentTime = targetPos;
+            if (audioRef.current) {
+              audioRef.current.currentTime = targetPos;
+            }
             setPlaybackPosition(targetPos);
             playbackPosRef.current = targetPos;
+
+            const syncedTimerSec = data.remoteState.timerSeconds ?? (settingsRef.current.timerTargetMinutes * 60);
+            timerSecondsRef.current = syncedTimerSec;
             setLastSynced(new Date().toLocaleTimeString());
+          }
+
+          if (data.settings) {
+            const reconciledSettings = reconcileSettings(settingsRef.current, data.settings);
+            setSettings(reconciledSettings);
+            settingsRef.current = reconciledSettings;
+            saveStoredSettings(reconciledSettings);
+            if (reconciledSettings.defaultPlaybackSpeed && audioRef.current) {
+              audioRef.current.playbackRate = reconciledSettings.defaultPlaybackSpeed;
+            }
           }
         }
       } catch (err) {
@@ -741,10 +1230,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       isPlayingRef.current = true;
       setSyncNotice(null);
       broadcastPlayback("PLAY");
+      saveSyncPoint("Playback Start");
     } catch (e) {
       console.warn("Playback error:", e);
     }
-  }, [broadcastPlayback, getAudioUrlForJuz]);
+  }, [broadcastPlayback, getAudioUrlForJuz, saveSyncPoint]);
 
   const pause = useCallback(() => {
     if (audioRef.current) {
@@ -767,13 +1257,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
       saveStoredState(updatedState);
 
       broadcastPlayback("PAUSE", { position: currentPos });
+      saveSyncPoint("Paused");
+      saveSyncPoint("Audio Stopped");
 
       // Immediately sync pause state with the exact position to server
       if (updatedState.isLoggedIn) {
         syncWithServer(updatedState, { isPlaying: false, action: "pause" });
       }
     }
-  }, [broadcastPlayback, syncWithServer]);
+  }, [broadcastPlayback, syncWithServer, saveSyncPoint]);
 
   const togglePlay = useCallback(() => {
     if (isPlaying) {
@@ -786,6 +1278,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const seekTo = useCallback(
     (seconds: number) => {
       const targetSec = Math.max(0, Math.min(seconds, duration || 99999));
+      if (Math.abs(targetSec - playbackPosRef.current) > 15) {
+        recordAccident("seek_jump", "Audio Scrubber Jump");
+      }
       if (audioRef.current) {
         audioRef.current.currentTime = targetSec;
       }
@@ -796,7 +1291,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         playbackPositionSeconds: targetSec,
       }));
     },
-    [duration, updateStateAndPersist]
+    [duration, updateStateAndPersist, recordAccident]
   );
 
   const rewind = useCallback(() => {
@@ -808,8 +1303,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [playbackPosition, settings.forwardStepSeconds, seekTo]);
 
   const resetTrack = useCallback(() => {
+    recordAccident("reset_track", "Reset Track to 00:00");
     seekTo(0);
-  }, [seekTo]);
+  }, [seekTo, recordAccident]);
 
   const setSpeed = useCallback((speed: PlaybackSpeed) => {
     setPlaybackSpeedState(speed);
@@ -834,25 +1330,46 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const confirmJuzSwitch = useCallback(
     (juzId: number) => {
+      recordAccident("switch_juz", `Switched to Juz ${juzId}`);
       setPendingJuzSwitch(null);
       setPlaybackPosition(0);
       playbackPosRef.current = 0;
+
+      const targetJuz = INITIAL_JUZ_LIST.find((j) => j.id === juzId) || INITIAL_JUZ_LIST[0];
+      const targetUrl = getAudioUrlForJuz(targetJuz);
+
       updateStateAndPersist((s) => ({
         ...s,
         currentJuzId: juzId,
         playbackPositionSeconds: 0,
+        isPlaying: true,
       }));
-      // Reset audio element
+
+      // Directly update and load the new track on the audio element
       if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = targetUrl;
         audioRef.current.currentTime = 0;
+        if (playbackSpeed) {
+          audioRef.current.playbackRate = playbackSpeed;
+        }
+        audioRef.current.load();
+        const playPromise = audioRef.current.play();
+        if (playPromise !== undefined) {
+          playPromise
+            .then(() => {
+              setIsPlaying(true);
+              isPlayingRef.current = true;
+              broadcastPlayback("PLAY", { juzId, position: 0 });
+            })
+            .catch((err) => {
+              console.warn("Track switch play error:", err);
+            });
+        }
       }
-      // Resume playback after switch
-      setTimeout(() => {
-        play();
-        syncWithServer();
-      }, 100);
+      syncWithServer();
     },
-    [updateStateAndPersist, play, syncWithServer]
+    [recordAccident, getAudioUrlForJuz, playbackSpeed, updateStateAndPersist, broadcastPlayback, syncWithServer]
   );
 
   const cancelJuzSwitch = useCallback(() => {
@@ -860,13 +1377,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const resetTimer = useCallback(() => {
+    recordAccident("timer_reset", "Reset Big Timer");
     const targetSec = settings.timerTargetMinutes * 60;
     timerSecondsRef.current = targetSec;
     updateStateAndPersist((prev) => ({
       ...prev,
       timerSeconds: targetSec,
     }));
-  }, [settings.timerTargetMinutes, updateStateAndPersist]);
+  }, [settings.timerTargetMinutes, updateStateAndPersist, recordAccident]);
+
+  const setTimerSeconds = useCallback(
+    (seconds: number) => {
+      const validSec = Math.max(-86400, Math.min(86400, Math.round(seconds)));
+      recordAccident("timer_reset", `Manually set Big Timer to ${formatHeroTimer(validSec)}`);
+      timerSecondsRef.current = validSec;
+      updateStateAndPersist((prev) => ({
+        ...prev,
+        timerSeconds: validSec,
+      }));
+    },
+    [recordAccident, updateStateAndPersist]
+  );
 
   const adjustTimerDefault = useCallback(
     (targetMinutes: number, resetCurrent: boolean = true) => {
@@ -954,23 +1485,36 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       timerSecondsRef.current = nextTimerSec;
 
+      // Check if audio finished (backup trigger if ended event was missed)
+      if (audioRef.current && isPlayingRef.current) {
+        const ct = audioRef.current.currentTime;
+        const dur = audioRef.current.duration;
+        if (audioRef.current.ended || (dur && isFinite(dur) && dur > 5 && ct >= dur - 0.3)) {
+          handleAudioEnded();
+          return;
+        }
+      }
+
       // Update today's record and 15-minute slot reading duration
       updateStateAndPersist((prevState) => {
-        const history = { ...prevState.historyRecords };
+        const history = { ...(prevState.historyRecords || {}) };
         const existingToday = history[todayStr] || {
           date: todayStr,
           secondsRead: 0,
           targetReached: false,
           slots: {},
+          juzCompletedCount: 0,
+          completedJuzIds: [],
         };
 
-        const updatedSecondsRead = existingToday.secondsRead + 1;
-        const currentSlotSec = (existingToday.slots[currentSlot] || 0) + 1;
-        const slots = { ...existingToday.slots, [currentSlot]: currentSlotSec };
+        const updatedSecondsRead = (existingToday.secondsRead || 0) + 1;
+        const currentSlotSec = (existingToday.slots?.[currentSlot] || 0) + 1;
+        const slots = { ...(existingToday.slots || {}), [currentSlot]: currentSlotSec };
 
         const targetCompleted = updatedSecondsRead >= streakTargetSec;
 
         history[todayStr] = {
+          ...existingToday,
           date: todayStr,
           secondsRead: updatedSecondsRead,
           targetReached: existingToday.targetReached || targetCompleted,
@@ -985,49 +1529,77 @@ export function AppProvider({ children }: { children: ReactNode }) {
           historyRecords: history,
         };
       });
+
+      // Append to rolling history buffer (last 5 minutes of continuous playback)
+      recentHistoryRef.current.push({
+        time: Date.now(),
+        juzId: userStateRef.current.currentJuzId,
+        position: currentPos,
+        timerSeconds: nextTimerSec,
+      });
+      if (recentHistoryRef.current.length > 300) {
+        recentHistoryRef.current.shift();
+      }
+
+      // Check periodic synch checkpoint every 2 minutes
+      // Check periodic synch checkpoint every 5 minutes (300,000 ms)
+      const currentSyncPoints = userStateRef.current.syncPoints || [];
+      const lastPoint = currentSyncPoints[0];
+      const lastPointTime = lastPoint ? new Date(lastPoint.timestamp).getTime() : 0;
+      if (Date.now() - lastPointTime >= 120_000) {
+        saveSyncPoint("Periodic Checkpoint");
+      if (Date.now() - lastPointTime >= 300_000) {
+        saveSyncPoint("Periodic Checkpoint (5m)");
+      }
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [settings.timerMode, settings.timerTargetMinutes, settings.streakTargetMinutes, updateStateAndPersist]);
+  }, [settings.timerMode, settings.timerTargetMinutes, settings.streakTargetMinutes, updateStateAndPersist, saveSyncPoint]);
 
-  // Audio Ended Handler: Automatic Playlist Continuous Playback
-  const handleAudioEnded = useCallback(() => {
-    // Log completion
+  // Seamless Track Advance: Move to the next Juz in the playlist
+  const moveToNextJuz = useCallback(() => {
+    saveSyncPoint("Completed Juz");
+    const currentId = userStateRef.current.currentJuzId;
+    const nextJuzId = currentId < 30 ? currentId + 1 : 1;
+    const nextJuz = INITIAL_JUZ_LIST.find((j) => j.id === nextJuzId) || INITIAL_JUZ_LIST[0];
+    const nextUrl = getAudioUrlForJuz(nextJuz);
+
+    // 1. Log completion of current Juz
     const logEntry: UserLogEntry = {
       id: "log_" + Date.now(),
       timestamp: new Date().toISOString(),
-      juzId: currentJuz.id,
+      juzId: currentId,
       juzName: juzName,
-      durationSeconds: Math.floor(playbackPosition),
+      durationSeconds: Math.floor(playbackPosRef.current),
       playbackSpeed: playbackSpeed,
       action: "complete_juz",
     };
 
-    updateStateAndPersist((s) => ({
-      ...s,
-      userLogs: [logEntry, ...(s.userLogs || [])].slice(0, 500),
-    }));
-    // Requirement: When an audio file reaches the end it will update the Big Timer
-    // to the default amount or the AutoTimer setting when it moves on to the next file.
-    const autoMinutes =
-      settings.autoTimerDurationMinutes ?? settings.timerTargetMinutes ?? 30;
-    const resetTimerSec =
-      settings.timerMode === "countdown" ? autoMinutes * 60 : 0;
-    timerSecondsRef.current = resetTimerSec;
+    // 2. Timer Handling:
+    // If autoTimerDurationMinutes is explicitly configured in settings, reset to that duration.
+    // If not explicitly configured, and Big Timer has NOT expired (> 0), KEEP the remaining time!
+    // If timer had already expired (<= 0), reset to default target.
+    const autoMinutes = settingsRef.current.autoTimerDurationMinutes;
+    let nextTimerSec = timerSecondsRef.current;
+    if (autoMinutes !== undefined && autoMinutes !== null && autoMinutes > 0) {
+      nextTimerSec = settingsRef.current.timerMode === "countdown" ? autoMinutes * 60 : 0;
+      timerSecondsRef.current = nextTimerSec;
+    } else if (timerSecondsRef.current <= 0) {
+      const defaultMinutes = settingsRef.current.timerTargetMinutes || 30;
+      nextTimerSec = settingsRef.current.timerMode === "countdown" ? defaultMinutes * 60 : 0;
+      timerSecondsRef.current = nextTimerSec;
+    }
 
-    // Requirement: Whenever an audio file reaches the end a Juz tally is updated.
-    // This is what is used to update the 30 day percentage streak.
+    // 3. Atomically update completed Juzes, daily tally, Khatm plan and advance to nextJuzId
     const todayStr = getLocalDateString();
-    const completedJuzId = currentJuz.id;
-
     updateStateAndPersist((s) => {
       const currentCompleted = s.completedJuzs || [];
-      const nextCompleted = currentCompleted.includes(completedJuzId)
+      const nextCompleted = currentCompleted.includes(currentId)
         ? currentCompleted
-        : [...currentCompleted, completedJuzId].sort((a, b) => a - b);
+        : [...currentCompleted, currentId].sort((a, b) => a - b);
       const nextTally = (s.juzTally || 0) + 1;
 
-      const history = { ...s.historyRecords };
+      const history = { ...(s.historyRecords || {}) };
       const existingToday = history[todayStr] || {
         date: todayStr,
         secondsRead: 0,
@@ -1038,17 +1610,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       };
 
       const existingJuzIds = existingToday.completedJuzIds || [];
-      const nextTodayCompletedJuzIds = [...existingJuzIds, completedJuzId];
+      const nextTodayCompletedJuzIds = [...existingJuzIds, currentId];
       const nextTodayJuzCount = (existingToday.juzCompletedCount || 0) + 1;
 
       history[todayStr] = {
         ...existingToday,
-        targetReached: true, // Completing a Juz fulfills the streak for the day
+        targetReached: true, // Completing a Juz fulfills streak for the day
         juzCompletedCount: nextTodayJuzCount,
         completedJuzIds: nextTodayCompletedJuzIds,
       };
 
-      // If active Khatm plan is running, check if completed Juz matches any day in the plan
+      // Handle Khatm plan progress if active
       let nextKhatm = s.khatmPlan || settingsRef.current.khatmPlan;
       if (nextKhatm && !nextKhatm.isCompleted) {
         const matchingDays: number[] = [];
@@ -1057,7 +1629,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           const toOffset = Math.max(fromOffset + 1, Math.floor((d + 1) * nextKhatm.amountPerDay));
           for (let k = fromOffset; k < toOffset; k++) {
             const jId = ((nextKhatm.startJuz - 1 + k) % 30) + 1;
-            if (jId === completedJuzId) {
+            if (jId === currentId) {
               matchingDays.push(d);
             }
           }
@@ -1080,28 +1652,63 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       return {
         ...s,
-        timerSeconds: resetTimerSec,
+        currentJuzId: nextJuzId,
+        playbackPositionSeconds: 0,
+        timerSeconds: nextTimerSec,
         completedJuzs: nextCompleted,
         juzTally: nextTally,
         historyRecords: history,
         userLogs: [logEntry, ...(s.userLogs || [])].slice(0, 500),
         khatmPlan: nextKhatm,
+        isPlaying: true,
       };
     });
 
-    // Transition to next Juz seamlessly
-    const nextJuzId = currentJuz.id < 30 ? currentJuz.id + 1 : 1;
-    confirmJuzSwitch(nextJuzId);
+    // 4. Reset position tracking
+    setPlaybackPosition(0);
+    playbackPosRef.current = 0;
+
+    // 5. Directly load and play the next audio file
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = nextUrl;
+      audioRef.current.currentTime = 0;
+      if (playbackSpeed) {
+        audioRef.current.playbackRate = playbackSpeed;
+      }
+      audioRef.current.load();
+      const playPromise = audioRef.current.play();
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => {
+            setIsPlaying(true);
+            isPlayingRef.current = true;
+            broadcastPlayback("PLAY", { juzId: nextJuzId, position: 0 });
+          })
+          .catch((err) => {
+            console.warn("Auto-play next track error:", err);
+          });
+      }
+    }
   }, [
-    currentJuz.id,
     juzName,
-    playbackPosition,
     playbackSpeed,
-    settings.autoTimerDurationMinutes,
-    settings.timerTargetMinutes,
+    getAudioUrlForJuz,
     updateStateAndPersist,
-    confirmJuzSwitch,
+    broadcastPlayback,
   ]);
+
+  // Audio Ended Handler: Automatic Playlist Continuous Playback
+  const handleAudioEnded = useCallback(() => {
+    if (isTransitioningRef.current) return;
+    isTransitioningRef.current = true;
+    saveSyncPoint("Audio Stopped (Track Finished)");
+    moveToNextJuz();
+    setTimeout(() => {
+      isTransitioningRef.current = false;
+    }, 1500);
+  }, [moveToNextJuz]);
+  }, [moveToNextJuz, saveSyncPoint]);
 
   // Juz Checklist: Tap to mark done or undone
   const toggleJuzCompleted = useCallback(
@@ -1430,6 +2037,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
         saveStoredState(merged);
         setPlaybackPosition(merged.playbackPositionSeconds);
         playbackPosRef.current = merged.playbackPositionSeconds;
+
+        if (data.settings) {
+          const mergedSettings = reconcileSettings(settingsRef.current, data.settings);
+          setSettings(mergedSettings);
+          settingsRef.current = mergedSettings;
+          saveStoredSettings(mergedSettings);
+          if (mergedSettings.defaultPlaybackSpeed && audioRef.current) {
+            audioRef.current.playbackRate = mergedSettings.defaultPlaybackSpeed;
+          }
+        }
+
+        if (merged.currentJuzId && audioRef.current) {
+          const targetJuz = INITIAL_JUZ_LIST.find((j) => j.id === merged.currentJuzId) || INITIAL_JUZ_LIST[0];
+          const targetUrl = getAudioUrlForJuz(targetJuz);
+          if (!isSameAudioUrl(audioRef.current.src, targetUrl)) {
+            audioRef.current.src = targetUrl;
+          }
+          audioRef.current.currentTime = merged.playbackPositionSeconds || 0;
+        }
+
         setLastSynced(new Date().toLocaleTimeString());
         return { success: true };
       }
@@ -1514,11 +2141,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // Today's reading record
   const todayKey = getLocalDateString();
-  const todayRecord: DayReadingRecord = userState.historyRecords[todayKey] || {
+  const records = userState.historyRecords || {};
+  const todayRecord: DayReadingRecord = records[todayKey] || {
     date: todayKey,
     secondsRead: 0,
     targetReached: false,
     slots: {},
+    juzCompletedCount: 0,
+    completedJuzIds: [],
   };
 
   return (
@@ -1551,6 +2181,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         timerMode: settings.timerMode,
         isTimerRunning: isPlaying,
         resetTimer,
+        setTimerSeconds,
         adjustTimerDefault,
         setTimerMode,
         settings,
@@ -1561,7 +2192,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         toggleThemeMode,
         setThemeMode,
         setThemeColor,
-        historyRecords: userState.historyRecords,
+        historyRecords: userState.historyRecords || {},
         todayRecord,
         streakTargetMinutes: settings.streakTargetMinutes ?? settings.timerTargetMinutes ?? 30,
         setStreakTargetMinutes,
@@ -1587,6 +2218,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
         lastSynced,
         manualSync,
         syncNotice,
+        syncPoints: userState.syncPoints || [],
+        saveSyncPoint,
+        rollbackToSyncPoint,
+        rollbackToAccidentFifteenSeconds,
+        lastAccident,
+        isLastSyncPointOlderThan1Min,
+        isRollBackOpen,
+        setIsRollBackOpen,
+        openRollBack,
+        closeRollBack,
       }}
     >
       {/* Underlying Audio Element with CDN Fallback Error Handling */}
@@ -1596,8 +2237,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         preload="metadata"
         onTimeUpdate={(e) => {
           const ct = e.currentTarget.currentTime;
+          const dur = e.currentTarget.duration;
           setPlaybackPosition(ct);
           playbackPosRef.current = ct;
+          if (dur && isFinite(dur) && dur > 5 && ct >= dur - 0.3) {
+            handleAudioEnded();
+          }
         }}
         onLoadedMetadata={(e) => {
           const d = e.currentTarget.duration;
@@ -1607,10 +2252,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
           if (playbackSpeed) {
             e.currentTarget.playbackRate = playbackSpeed;
           }
-          // Restore position if loading fresh or transitioning source
-          const targetPos = playbackPosRef.current || playbackPosition || userStateRef.current.playbackPositionSeconds || 0;
+          // Restore position if restoring progress (> 0)
+          const targetPos = playbackPosRef.current;
           if (targetPos > 0 && Math.abs(e.currentTarget.currentTime - targetPos) > 1) {
             e.currentTarget.currentTime = targetPos;
+          }
+        }}
+        onPause={(e) => {
+          if (isPlayingRef.current) {
+            setIsPlaying(false);
+            isPlayingRef.current = false;
+            const currentPos = e.currentTarget.currentTime;
+            setPlaybackPosition(currentPos);
+            playbackPosRef.current = currentPos;
+            saveSyncPoint("Audio Stopped");
           }
         }}
         onEnded={handleAudioEnded}

@@ -40,11 +40,25 @@ function formatHumanDate(dateStr: string): string {
   try {
     const [y, m, d] = dateStr.split("-").map(Number);
     const date = new Date(y, m - 1, d);
-    return date.toLocaleDateString(undefined, {
+    return date.toLocaleDateString("en-US", {
       weekday: "short",
       month: "short",
       day: "numeric",
     });
+  } catch {
+    return dateStr;
+  }
+}
+
+/**
+ * Format date string into short column header e.g. "Mon 10/9"
+ */
+function formatTrackDateHeader(dateStr: string): string {
+  try {
+    const [y, m, d] = dateStr.split("-").map(Number);
+    const date = new Date(y, m - 1, d);
+    const dayName = date.toLocaleDateString("en-US", { weekday: "short" });
+    return `${dayName} ${date.getMonth() + 1}/${date.getDate()}`;
   } catch {
     return dateStr;
   }
@@ -93,6 +107,7 @@ export const KhatmPlanner: React.FC = () => {
 
   // Ref to today's schedule row for "Jump to Today"
   const todayRowRef = useRef<HTMLDivElement | null>(null);
+  const todayTrackColRef = useRef<HTMLDivElement | null>(null);
 
   // Sync form inputs when editing begins or when plan changes
   useEffect(() => {
@@ -230,6 +245,13 @@ export const KhatmPlanner: React.FC = () => {
 
   // Jump to Today
   const handleJumpToToday = () => {
+    if (todayTrackColRef.current) {
+      todayTrackColRef.current.scrollIntoView({
+        behavior: "smooth",
+        inline: "center",
+        block: "nearest",
+      });
+    }
     if (todayRowRef.current) {
       todayRowRef.current.scrollIntoView({
         behavior: "smooth",
@@ -537,7 +559,7 @@ export const KhatmPlanner: React.FC = () => {
         </form>
       )}
 
-      {/* When a plan is active: render Brick Progress Bars, Finish Line, and Schedule */}
+      {/* When a plan is active: render Daily Progress Bars, Finish Line, and Schedule */}
       {scheduleData && (
         <div className="space-y-5 sm:space-y-6">
           {/* Plan Meta Overview Cards */}
@@ -638,17 +660,14 @@ export const KhatmPlanner: React.FC = () => {
             </div>
           )}
 
-          {/* DUAL-TRACK PROGRESS BARS WITH DAILY BRICK BLOCKS & DOTTED FINISH LINE */}
+          {/* DUAL-TRACK PROGRESS BARS WITH DAILY SEGMENTS & DOTTED FINISH LINE */}
           <div className="p-3.5 sm:p-5 rounded-2xl bg-surface-subtle/80 border border-surface-border space-y-4 sm:space-y-5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3">
               <div className="min-w-0">
                 <h3 className="text-xs sm:text-sm font-bold text-content-primary flex items-center gap-1.5">
                   <Flag className="w-4 h-4 text-brand-primary shrink-0" />
-                  <span>Khatm Race Track (Daily Bricks)</span>
+                  <span>Khatm Race Track</span>
                 </h3>
-                <p className="text-[11px] text-content-muted mt-0.5">
-                  Daily brick blocks progressing toward the vertical finish line
-                </p>
               </div>
 
               <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 text-[11px] font-medium">
@@ -672,87 +691,131 @@ export const KhatmPlanner: React.FC = () => {
             {/* The Track Container */}
             <div className="relative overflow-x-auto pb-2 scrollbar-thin">
               <div className="min-w-[640px] flex items-stretch pr-10">
-                {/* Track lanes for the brick blocks */}
+                {/* Track lanes for the daily segments */}
                 <div className="flex-1 space-y-3 pr-4">
                   {/* Lane 1: Completed Listenings Bar */}
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between text-[11px] font-semibold text-content-secondary px-0.5">
-                      <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        Completed Listenings
-                      </span>
-                      <span className="font-mono text-emerald-600 dark:text-emerald-400">
-                        {scheduleData.completedCount} / {scheduleData.durationDays} Days (
-                        {Math.round((scheduleData.completedCount / scheduleData.durationDays) * 100)}%)
-                      </span>
-                    </div>
-
-                    {/* Brick Blocks Row 1 */}
-                    <div className="flex items-center gap-1 sm:gap-1.5 h-8 p-1 rounded-xl bg-surface-card border border-surface-border">
+                  <div className="flex items-center gap-1 sm:gap-1.5 h-8 p-1 rounded-xl bg-surface-card border border-surface-border">
                       {scheduleData.days.map((day) => {
                         const isDone = day.isCompleted;
                         return (
+              <div className="min-w-max flex items-stretch pr-4">
+                {/* Left Lane Indicators */}
+                <div className="shrink-0 flex flex-col justify-between py-1 pr-2 sm:pr-3 select-none">
+                  <div className="h-6 flex items-center text-[10px] font-bold text-content-muted uppercase tracking-wider">
+                    Date
+                  </div>
+                  <div className="h-8 flex items-center gap-1.5 text-[11px] font-semibold text-content-secondary">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-xs shrink-0" />
+                    <span className="hidden sm:inline">Done</span>
+                  </div>
+                  <div className="h-8 flex items-center gap-1.5 text-[11px] font-semibold text-content-secondary">
+                    <span className="w-2.5 h-2.5 rounded-full bg-sky-500 shadow-xs shrink-0" />
+                    <span className="hidden sm:inline">Pace</span>
+                  </div>
+                </div>
+
+                {/* Track Columns for each Day */}
+                <div className="flex items-stretch gap-1 sm:gap-1.5">
+                  {scheduleData.days.map((day) => {
+                    const isDone = day.isCompleted;
+                    const isScheduled = day.dayNumber <= scheduleData.scheduledDaysSoFar;
+                    const isTargetToday = day.isToday;
+
+                    return (
+                      <div
+                        key={`track-col-${day.dayIndex}`}
+                        ref={day.isToday ? todayTrackColRef : null}
+                        className={`flex flex-col justify-between min-w-[56px] sm:min-w-[64px] p-1 rounded-2xl transition-colors ${
+                          day.isToday
+                            ? "bg-brand-light/30 border border-brand-primary/30"
+                            : "hover:bg-surface-card/50"
+                        }`}
+                      >
+                        {/* Date Header above matching column (e.g. Mon 10/9) */}
+                        <div
+                          className={`h-6 flex items-center justify-center px-1 rounded-lg text-[10px] sm:text-[11px] font-mono whitespace-nowrap transition-all ${
+                            day.isToday
+                              ? "bg-brand-primary text-white font-extrabold shadow-sm ring-1 ring-brand-light"
+                              : "text-content-muted font-medium"
+                          }`}
+                          title={`${formatHumanDate(day.dateStr)} (Day ${day.dayNumber})`}
+                        >
+                          {formatTrackDateHeader(day.dateStr)}
+                        </div>
+
+                        {/* Lane 1: Completed Listenings Block */}
+                        <div className="py-1">
                           <button
-                            key={`completed-brick-${day.dayIndex}`}
+                            key={`completed-segment-${day.dayIndex}`}
                             type="button"
                             onClick={() => toggleKhatmDayCompleted(day.dayIndex)}
                             title={`Day ${day.dayNumber} (${formatHumanDate(day.dateStr)}): ${
                               day.juzLabel
                             } • ${isDone ? "Completed (tap to undo)" : "Tap to mark done"}`}
                             className={`flex-1 h-full rounded-md transition-all duration-200 cursor-pointer flex items-center justify-center text-[10px] font-bold ${
+                            className={`w-full h-8 rounded-xl transition-all duration-200 cursor-pointer flex items-center justify-center text-[10px] font-bold ${
                               isDone
                                 ? "bg-emerald-500 text-white shadow-sm ring-1 ring-emerald-400/50 active:scale-95"
                                 : "bg-surface-subtle/80 hover:bg-surface-hover text-content-muted/40 border border-surface-border/60 hover:border-emerald-500/50"
+                                ? "bg-emerald-500 text-white shadow-sm ring-1 ring-emerald-400/50 hover:bg-emerald-600 active:scale-95"
+                                : "bg-surface-card hover:bg-surface-hover text-content-muted/50 border border-surface-border hover:border-emerald-500/50"
                             }`}
                           >
                             {isDone ? <Check className="w-2.5 h-2.5 stroke-[3]" /> : null}
+                            {isDone ? (
+                              <Check className="w-3 h-3 stroke-[3]" />
+                            ) : (
+                              <span className="text-[9px] opacity-40 font-mono">{day.dayNumber}</span>
+                            )}
                           </button>
                         );
                       })}
-                    </div>
                   </div>
+                        </div>
 
                   {/* Lane 2: Scheduled Target Pace Bar */}
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between text-[11px] font-semibold text-content-secondary px-0.5">
-                      <span className="flex items-center gap-1.5 text-sky-600 dark:text-sky-400">
-                        <Calendar className="w-3.5 h-3.5" />
-                        Scheduled Target Pace
-                      </span>
-                      <span className="font-mono text-sky-600 dark:text-sky-400">
-                        Day {scheduleData.scheduledDaysSoFar} of {scheduleData.durationDays} (Target for Today)
-                      </span>
-                    </div>
-
-                    {/* Brick Blocks Row 2 */}
-                    <div className="flex items-center gap-1 sm:gap-1.5 h-8 p-1 rounded-xl bg-surface-card border border-surface-border">
+                  <div className="flex items-center gap-1 sm:gap-1.5 h-8 p-1 rounded-xl bg-surface-card border border-surface-border">
                       {scheduleData.days.map((day) => {
                         const isScheduled = day.dayNumber <= scheduleData.scheduledDaysSoFar;
                         const isTargetToday = day.isToday;
                         return (
+                        {/* Lane 2: Scheduled Target Pace Block */}
+                        <div className="py-1">
                           <div
-                            key={`schedule-brick-${day.dayIndex}`}
+                            key={`schedule-segment-${day.dayIndex}`}
                             title={`Day ${day.dayNumber} (${formatHumanDate(day.dateStr)}): ${
                               day.juzLabel
                             } • ${isTargetToday ? "Today's Target!" : isScheduled ? "Scheduled" : "Upcoming"}`}
                             className={`flex-1 h-full rounded-md transition-all duration-200 flex items-center justify-center text-[10px] font-bold ${
+                            } • ${isTargetToday ? "Today's Target!" : isScheduled ? "Scheduled Pace" : "Upcoming"}`}
+                            className={`w-full h-8 rounded-xl transition-all duration-200 flex items-center justify-center text-[10px] font-bold ${
                               isTargetToday
                                 ? "bg-sky-500 text-white shadow-md ring-2 ring-sky-300 dark:ring-sky-500 animate-pulse"
                                 : isScheduled
                                 ? "bg-sky-500/85 text-white shadow-sm ring-1 ring-sky-400/30"
                                 : "bg-surface-subtle/80 text-content-muted/40 border border-surface-border/60"
+                                : "bg-surface-card text-content-muted/30 border border-surface-border/60"
                             }`}
                           >
                             {isTargetToday && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
+                            {isTargetToday ? (
+                              <span className="w-2 h-2 rounded-full bg-white shadow-sm" />
+                            ) : isScheduled ? (
+                              <span className="w-1.5 h-1.5 rounded-full bg-white/70" />
+                            ) : null}
                           </div>
                         );
                       })}
-                    </div>
                   </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
 
                 {/* THE DOTTED VERTICAL FINISH LINE */}
                 <div className="w-20 shrink-0 flex flex-col items-center justify-center relative border-l-2 border-dashed border-content-muted/70 pl-3">
+                <div className="w-20 shrink-0 flex flex-col items-center justify-center relative border-l-2 border-dashed border-content-muted/70 pl-3 ml-2">
                   <div className="flex flex-col items-center gap-1 text-center select-none">
                     <div className="w-7 h-7 rounded-xl bg-surface-card border border-surface-border flex items-center justify-center text-sm shadow-sm">
                       🏁

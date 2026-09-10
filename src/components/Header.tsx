@@ -19,23 +19,29 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header className="w-full bg-surface-card/90 backdrop-blur-md border-b border-surface-border sticky top-0 z-40 px-4 py-3 sm:px-6 transition-colors duration-200">
       <div className="max-w-4xl mx-auto flex items-center justify-between">
-        {/* App Branding */}
-        <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-xl overflow-hidden flex items-center justify-center shadow-lg transition-transform duration-200 hover:scale-105">
+        {/* App Branding (Click to scroll to top) */}
+        <button
+          type="button"
+          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+          title="Scroll to top"
+          className="flex items-center space-x-3 cursor-pointer text-left focus:outline-none group select-none"
+        >
+          <div className="w-10 h-10 rounded-xl overflow-hidden flex items-center justify-center shadow-lg transition-transform duration-200 group-hover:scale-105 active:scale-95">
             <QLogo className="w-10 h-10" />
           </div>
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-content-primary">
+            <h1 className="text-xl font-bold tracking-tight text-content-primary group-hover:text-brand-primary transition-colors">
               Qleading
             </h1>
           </div>
-        </div>
+        </button>
 
         {/* User, Sync, Theme & Settings Actions */}
         <div className="flex items-center space-x-1.5 sm:space-x-2.5">
 
           {/* Sync status & button */}
           <button
+            type="button"
             onClick={manualSync}
             disabled={isSyncing}
             title={
@@ -57,6 +63,7 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* User Profile / Login */}
           <button
+            type="button"
             onClick={onOpenAuth}
             className="flex items-center gap-2 text-xs bg-surface-subtle hover:bg-surface-hover px-3 py-1.5 rounded-xl border border-surface-border text-content-secondary hover:text-content-primary transition shadow-sm"
           >
@@ -68,6 +75,7 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Settings Modal Opener */}
           <button
+            type="button"
             onClick={onOpenSettings}
             title="Settings"
             className="p-2 rounded-xl bg-surface-subtle hover:bg-surface-hover text-content-secondary hover:text-content-primary border border-surface-border transition shadow-sm"
@@ -79,4 +87,3 @@ export const Header: React.FC<HeaderProps> = ({
     </header>
   );
 };
-

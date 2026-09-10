@@ -71,3 +71,35 @@ export function formatSlotTime(slotIndex: number): string {
   const min = (slotIndex % 4) * 15;
   return `${String(hour).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
 }
+
+/**
+ * Format ISO string to relative human-readable string (e.g. "Just now", "2m ago", "1h ago")
+ */
+export function formatRelativeTime(isoString: string): string {
+  try {
+    const diffMs = Date.now() - new Date(isoString).getTime();
+    const diffSec = Math.floor(diffMs / 1000);
+    if (diffSec < 10) return "Just now";
+    if (diffSec < 60) return `${diffSec}s ago`;
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `${diffMin}m ago`;
+    const diffHours = Math.floor(diffMin / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    return `${diffDays}d ago`;
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Format ISO string to local time string (e.g. "14:32:05")
+ */
+export function formatDateTime(isoString: string): string {
+  try {
+    const d = new Date(isoString);
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  } catch {
+    return isoString;
+  }
+}

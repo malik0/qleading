@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useApp } from "../context/AppContext";
 import { formatAudioTime, formatHeroTimer } from "../lib/utils";
 import { ChevronDown, Volume2, SlidersHorizontal, Clock } from "lucide-react";
@@ -27,6 +28,7 @@ export const JuzDisplay: React.FC = () => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isTimerModalOpen, setIsTimerModalOpen] = useState(false);
   const [currentDateTime, setCurrentDateTime] = useState<Date | null>(null);
+  const selectedJuzRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     setCurrentDateTime(new Date());
@@ -35,6 +37,20 @@ export const JuzDisplay: React.FC = () => {
     }, 1000);
     return () => clearInterval(interval);
   }, []);
+
+  // Focus the list around the current selected Juz number when dropdown opens
+  useEffect(() => {
+    if (isDropdownOpen) {
+      // Use requestAnimationFrame or timeout to ensure dropdown DOM node is painted
+      const timer = setTimeout(() => {
+        selectedJuzRef.current?.scrollIntoView({
+          block: "center",
+          behavior: "instant",
+        });
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [isDropdownOpen, currentJuzId]);
 
   // Time remaining adjusted for playback speed (Requirement 1.3)
   const rawRemainingSeconds = Math.max(0, duration - playbackPosition);
@@ -102,7 +118,7 @@ export const JuzDisplay: React.FC = () => {
         {/* Clickable Area for Timer Modal */}
         <button
           onClick={() => setIsTimerModalOpen(true)}
-          title="Click to adjust timer default value or reset timer"
+          title="Click to manually edit timer or match audio"
           className="group flex flex-col items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary rounded-3xl px-3 sm:px-6 py-2 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer max-w-full"
         >
           {/* Requirement 1: The Juz tally of the day should appear as a small filled circle above the date but below the border of the Juz Display */}
@@ -164,9 +180,19 @@ export const JuzDisplay: React.FC = () => {
           {/* Interactive Hint Pill */}
           <div className="mt-1.5 flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] bg-surface-subtle group-hover:bg-surface-hover border border-surface-border text-content-muted group-hover:text-content-primary transition shadow-sm">
             <SlidersHorizontal className="w-3 h-3 text-brand-primary group-hover:rotate-90 transition-transform duration-300 shrink-0" />
-            <span>Click to adjust or reset</span>
+            <span>Click to edit or match audio</span>
           </div>
         </button>
+
+        {/* How Much Listened Today */}
+        <div className="mt-3 flex items-center justify-center gap-1.5 select-none animate-fadeIn">
+          <span className="text-2xl sm:text-3xl md:text-4xl font-extrabold font-mono text-brand-primary">
+            {Math.round((todayRecord.secondsRead || 0) / 60)}
+          </span>
+          <span className="text-sm sm:text-base font-semibold text-content-secondary">
+            min listened today
+          </span>
+        </div>
       </div>
 
       {/* Divider */}
@@ -193,6 +219,7 @@ export const JuzDisplay: React.FC = () => {
             {/* 1.2 DROPDOWN MENU FOR ALL 30 JUZS */}
             {isDropdownOpen && (
               <div className="absolute left-1/2 -translate-x-1/2 mt-2 w-[90vw] max-w-sm sm:w-96 max-h-80 overflow-y-auto bg-surface-card border border-surface-border rounded-2xl shadow-2xl p-2 z-50 divide-y divide-surface-border">
+              <div className="absolute left-1/2 -translate-x-1/2 mt-2 w-[90vw] max-w-sm sm:w-96 max-h-[60vh] sm:max-h-[460px] overflow-y-auto bg-surface-card border border-surface-border rounded-2xl shadow-2xl p-2 z-50 divide-y divide-surface-border">
                 <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-content-muted">
                   Select from 30 Quran Juz
                 </div>
@@ -205,6 +232,7 @@ export const JuzDisplay: React.FC = () => {
                     return (
                       <button
                         key={item.id}
+                        ref={isCurrent ? selectedJuzRef : null}
                         onClick={() => {
                           selectJuz(item.id);
                           setIsDropdownOpen(false);

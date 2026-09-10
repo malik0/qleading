@@ -61,7 +61,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="bg-surface-base text-content-primary min-h-screen flex flex-col transition-colors duration-200">
+      <body className="bg-surface-base text-content-primary min-h-screen flex flex-col transition-colors duration-200" suppressHydrationWarning>
         <AppProvider>{children}</AppProvider>
       </body>
     </html>

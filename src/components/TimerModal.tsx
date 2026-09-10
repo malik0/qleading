@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useApp } from "../context/AppContext";
-import { formatHeroTimer } from "../lib/utils";
+import { formatHeroTimer, formatAudioTime } from "../lib/utils";
 import {
   X,
   Clock,
@@ -13,6 +13,8 @@ import {
   CheckCircle2,
   Plus,
   Minus,
+  Headphones,
+  Pencil,
 } from "lucide-react";
 
 interface TimerModalProps {
@@ -28,14 +30,23 @@ export const TimerModal: React.FC<TimerModalProps> = ({ isOpen, onClose }) => {
     timerTargetMinutes,
     isTimerRunning,
     resetTimer,
+    setTimerSeconds,
     adjustTimerDefault,
+    duration,
+    playbackPosition,
+    playbackSpeed,
+    juzName,
   } = useApp();
 
-  const [targetMinutes, setTargetMinutes] = useState(timerTargetMinutes);
-  const [applyToCurrent, setApplyToCurrent] = useState(true);
-  const [resetSuccessMessage, setResetSuccessMessage] = useState<string | null>(
-    null
+  const [manualMinutes, setManualMinutes] = useState<number>(() =>
+    Math.floor(Math.max(0, timerSeconds) / 60)
   );
+  const [manualSeconds, setManualSeconds] = useState<number>(
+    () => Math.max(0, timerSeconds) % 60
+  );
+  const [targetMinutes, setTargetMinutes] = useState(timerTargetMinutes);
+  const [applyToCurrent, setApplyToCurrent] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -45,10 +56,14 @@ export const TimerModal: React.FC<TimerModalProps> = ({ isOpen, onClose }) => {
   // Sync state when modal opens
   useEffect(() => {
     if (isOpen) {
+      const sec = Math.max(0, timerSeconds);
+      setManualMinutes(Math.floor(sec / 60));
+      setManualSeconds(sec % 60);
       setTargetMinutes(timerTargetMinutes);
-      setResetSuccessMessage(null);
+      setApplyToCurrent(false);
+      setSuccessMessage(null);
     }
-  }, [isOpen, timerTargetMinutes]);
+  }, [isOpen, timerSeconds, timerTargetMinutes]);
 
   // Handle ESC key to close
   useEffect(() => {
@@ -64,12 +79,74 @@ export const TimerModal: React.FC<TimerModalProps> = ({ isOpen, onClose }) => {
 
   if (!isOpen || !mounted) return null;
 
+  // Calculate remaining time in current audio adjusted for active playback speed
+  const speed = playbackSpeed || 1.0;
+  const rawTimeLeftInAudio = Math.max(
+    0,
+    Math.round((duration || 0) - (playbackPosition || 0))
+  );
+  const timeLeftInAudio = Math.round(rawTimeLeftInAudio / speed);
+  const audioTimeFormatted = formatAudioTime(timeLeftInAudio);
+
+  // Match Audio Handler: Sets the timer to adjusted time left in audio
+  const handleMatchAudio = () => {
+    const spd = playbackSpeed || 1.0;
+    const rawTimeLeft = Math.max(
+      0,
+      Math.round((duration || 0) - (playbackPosition || 0))
+    );
+    const timeLeft = Math.round(rawTimeLeft / spd);
+    const mins = Math.floor(timeLeft / 60);
+    const secs = timeLeft % 60;
+    setManualMinutes(mins);
+    setManualSeconds(secs);
+    setApplyToCurrent(false);
+    setTimerSeconds(timeLeft);
+    setSuccessMessage(
+      `Matched audio: ${formatHeroTimer(timeLeft)} left in ${juzName}${spd !== 1.0 ? ` (${spd}x speed)` : ""}`
+    );
+    setTimeout(() => {
+      setSuccessMessage(null);
+    }, 3000);
+  };
+
+  // Apply Manual Edit to active timer
+  const handleApplyManualTime = () => {
+    const totalSec = manualMinutes * 60 + manualSeconds;
+    setApplyToCurrent(false);
+    setTimerSeconds(totalSec);
+    setSuccessMessage(`Big Timer set to ${formatHeroTimer(totalSec)}`);
+    setTimeout(() => {
+      setSuccessMessage(null);
+    }, 2500);
+  };
+
+  // Reset Timer to default target
   const handleResetTimer = () => {
     resetTimer();
-    setResetSuccessMessage(`Timer reset to ${timerTargetMinutes}:00`);
+    setManualMinutes(timerTargetMinutes);
+    setManualSeconds(0);
+    setApplyToCurrent(false);
+    setSuccessMessage(`Timer reset to default (${timerTargetMinutes}:00)`);
     setTimeout(() => {
-      setResetSuccessMessage(null);
+      setSuccessMessage(null);
     }, 2500);
+  };
+
+  // Nudge time up or down
+  const handleNudge = (deltaSeconds: number) => {
+    const currentTotal = manualMinutes * 60 + manualSeconds;
+    const nextTotal = Math.max(0, currentTotal + deltaSeconds);
+    const m = Math.floor(nextTotal / 60);
+    const s = nextTotal % 60;
+    setManualMinutes(m);
+    setManualSeconds(s);
+    setApplyToCurrent(false);
+    setTimerSeconds(nextTotal);
+    setSuccessMessage(`Big Timer adjusted to ${formatHeroTimer(nextTotal)}`);
+    setTimeout(() => {
+      setSuccessMessage(null);
+    }, 2000);
   };
 
   const handleQuickPreset = (mins: number) => {
@@ -81,7 +158,13 @@ export const TimerModal: React.FC<TimerModalProps> = ({ isOpen, onClose }) => {
   };
 
   const handleSaveAndApply = () => {
-    adjustTimerDefault(targetMinutes, applyToCurrent);
+    if (applyToCurrent) {
+      adjustTimerDefault(targetMinutes, true);
+    } else {
+      const totalSec = manualMinutes * 60 + manualSeconds;
+      setTimerSeconds(totalSec);
+      adjustTimerDefault(targetMinutes, false);
+    }
     onClose();
   };
 
@@ -101,17 +184,17 @@ export const TimerModal: React.FC<TimerModalProps> = ({ isOpen, onClose }) => {
             </div>
             <div>
               <h3 className="text-base sm:text-lg font-bold text-content-primary">
-                Main Reading Timer
+                Edit Big Timer
               </h3>
               <p className="text-xs text-content-muted">
-                Adjust reading timer duration or reset current timer
+                Manually edit reading timer, match audio, or adjust default
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
             title="Close"
-            className="p-1.5 sm:p-2 rounded-xl bg-surface-subtle hover:bg-surface-hover text-content-muted hover:text-content-primary transition"
+            className="p-1.5 sm:p-2 rounded-xl bg-surface-subtle hover:bg-surface-hover text-content-muted hover:text-content-primary transition cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -119,11 +202,12 @@ export const TimerModal: React.FC<TimerModalProps> = ({ isOpen, onClose }) => {
 
         {/* Modal Body */}
         <div className="p-4 sm:p-6 space-y-5 sm:space-y-6 max-h-[80vh] overflow-y-auto">
-          {/* Live Timer Status Card with Quick Reset */}
-          <div className="bg-surface-subtle border border-surface-border rounded-2xl p-4 sm:p-5 text-center relative overflow-hidden">
-            <div className="flex items-center justify-between text-xs text-content-muted mb-2">
-              <span className="font-semibold uppercase tracking-wider">
-                Current Timer
+          {/* SECTION 1: MANUALLY EDITABLE BIG TIMER */}
+          <div className="bg-surface-subtle border border-surface-border rounded-2xl p-4 sm:p-5 relative overflow-hidden space-y-3">
+            <div className="flex items-center justify-between text-xs text-content-muted">
+              <span className="font-bold uppercase tracking-wider flex items-center gap-1.5 text-content-primary">
+                <Pencil className="w-3.5 h-3.5 text-brand-primary" />
+                Edit Current Timer
               </span>
               <span
                 className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
@@ -136,33 +220,142 @@ export const TimerModal: React.FC<TimerModalProps> = ({ isOpen, onClose }) => {
               </span>
             </div>
 
-            {/* Current Value Display */}
-            <div className="font-mono text-4xl sm:text-5xl font-extrabold text-content-primary my-1 tracking-tight">
-              {formatHeroTimer(timerSeconds)}
+            {/* Manual Numeric Inputs (Minutes : Seconds) */}
+            <div className="flex items-center justify-center gap-2 sm:gap-3 py-1">
+              <div className="flex flex-col items-center">
+                <input
+                  type="number"
+                  min={0}
+                  max={720}
+                  value={manualMinutes}
+                  onChange={(e) => {
+                    const val = Math.max(
+                      0,
+                      Math.min(720, parseInt(e.target.value, 10) || 0)
+                    );
+                    setManualMinutes(val);
+                  }}
+                  className="w-20 sm:w-24 bg-surface-card border-2 border-surface-border focus:border-brand-primary rounded-2xl p-2 text-center text-3xl sm:text-4xl font-mono font-extrabold text-content-primary focus:outline-none transition shadow-inner"
+                />
+                <span className="text-[10px] sm:text-[11px] font-semibold text-content-muted mt-1 uppercase tracking-wider">
+                  Minutes
+                </span>
+              </div>
+
+              <span className="text-3xl sm:text-4xl font-mono font-bold text-content-muted/60 pb-5">
+                :
+              </span>
+
+              <div className="flex flex-col items-center">
+                <input
+                  type="number"
+                  min={0}
+                  max={59}
+                  value={String(manualSeconds).padStart(2, "0")}
+                  onChange={(e) => {
+                    const val = Math.max(
+                      0,
+                      Math.min(59, parseInt(e.target.value, 10) || 0)
+                    );
+                    setManualSeconds(val);
+                  }}
+                  className="w-20 sm:w-24 bg-surface-card border-2 border-surface-border focus:border-brand-primary rounded-2xl p-2 text-center text-3xl sm:text-4xl font-mono font-extrabold text-content-primary focus:outline-none transition shadow-inner"
+                />
+                <span className="text-[10px] sm:text-[11px] font-semibold text-content-muted mt-1 uppercase tracking-wider">
+                  Seconds
+                </span>
+              </div>
             </div>
 
-            <p className="text-xs text-content-muted mb-4">
-              Target: <strong className="text-content-primary">{timerTargetMinutes} minutes</strong>
-            </p>
+            {/* Quick Step Adjustment Buttons */}
+            <div className="flex items-center justify-center gap-1.5 sm:gap-2 pt-0.5">
+              {[-300, -60, 60, 300].map((delta) => {
+                const label =
+                  delta === -300
+                    ? "-5m"
+                    : delta === -60
+                    ? "-1m"
+                    : delta === 60
+                    ? "+1m"
+                    : "+5m";
+                return (
+                  <button
+                    key={delta}
+                    type="button"
+                    onClick={() => handleNudge(delta)}
+                    className="px-2.5 py-1 rounded-lg text-xs font-mono font-semibold bg-surface-card hover:bg-surface-hover border border-surface-border text-content-secondary hover:text-content-primary transition cursor-pointer active:scale-95"
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
 
-            {/* Reset Button */}
+            {/* MATCH AUDIO BUTTON (Key Requirement) */}
             <button
-              onClick={handleResetTimer}
-              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-surface-card hover:bg-surface-hover border border-surface-border text-content-primary hover:border-brand-primary/50 font-semibold text-xs sm:text-sm transition shadow-sm group active:scale-[0.98] cursor-pointer"
+              type="button"
+              onClick={handleMatchAudio}
+              title={`Match remaining audio time (${audioTimeFormatted} remaining in ${juzName})`}
+              className="w-full flex items-center justify-between p-3 rounded-xl bg-brand-light/50 hover:bg-brand-light border border-brand-primary/30 hover:border-brand-primary/60 text-brand-primary transition shadow-sm group active:scale-[0.99] cursor-pointer mt-1"
             >
-              <RotateCcw className="w-4 h-4 text-brand-primary group-hover:-rotate-45 transition duration-200" />
-              <span>Reset Timer to Default</span>
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-lg bg-brand-primary text-white shadow-sm shrink-0">
+                  <Headphones className="w-4 h-4" />
+                </div>
+                <div className="text-left">
+                  <span className="font-bold text-xs sm:text-sm text-content-primary group-hover:text-brand-primary transition block">
+                    Match Audio
+                  </span>
+                  <span className="text-[11px] text-content-muted block">
+                    Match time left in audio ({audioTimeFormatted} remaining in {juzName})
+                  </span>
+                </div>
+              </div>
+              <span className="text-xs font-mono font-bold bg-surface-card px-2.5 py-1 rounded-lg border border-brand-primary/30 text-brand-primary shadow-xs shrink-0">
+                {audioTimeFormatted}
+              </span>
             </button>
 
-            {resetSuccessMessage && (
-              <div className="mt-2.5 flex items-center justify-center gap-1.5 text-xs text-brand-primary font-medium animate-fadeIn">
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                <span>{resetSuccessMessage}</span>
+            {(() => {
+              const totalSec = manualMinutes * 60 + manualSeconds;
+              const h = Math.floor(totalSec / 3600);
+              const m = Math.floor((totalSec % 3600) / 60);
+              const s = totalSec % 60;
+              const formattedTime = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+
+              return (
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={handleApplyManualTime}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-surface-card hover:bg-surface-hover border border-surface-border hover:border-brand-primary/40 text-content-primary font-semibold text-xs transition shadow-sm cursor-pointer active:scale-95"
+                  >
+                    <Check className="w-3.5 h-3.5 text-brand-primary" />
+                    <span>Set to {formattedTime}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleResetTimer}
+                    title="Reset timer to default target"
+                    className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-surface-card hover:bg-surface-hover border border-surface-border text-content-muted hover:text-content-primary font-medium text-xs transition shadow-sm cursor-pointer active:scale-95"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5 text-brand-primary" />
+                    <span>Reset ({timerTargetMinutes}m)</span>
+                  </button>
+                </div>
+              );
+            })()}
+
+            {/* Notification / Feedback Banner */}
+            {successMessage && (
+              <div className="mt-2 flex items-center justify-center gap-1.5 text-xs text-brand-primary font-semibold animate-fadeIn bg-brand-light/30 border border-brand-primary/20 py-1.5 px-3 rounded-xl">
+                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                <span>{successMessage}</span>
               </div>
             )}
           </div>
 
-          {/* Adjust Timer Default Duration Section */}
+          {/* SECTION 2: DEFAULT TIMER DURATION SETTING */}
           <div className="space-y-4 pt-1 border-t border-surface-border">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -223,7 +416,10 @@ export const TimerModal: React.FC<TimerModalProps> = ({ isOpen, onClose }) => {
                   value={targetMinutes}
                   onChange={(e) =>
                     setTargetMinutes(
-                      Math.max(1, Math.min(720, parseInt(e.target.value, 10) || 1))
+                      Math.max(
+                        1,
+                        Math.min(720, parseInt(e.target.value, 10) || 1)
+                      )
                     )
                   }
                   className="flex-1 bg-surface-subtle border border-surface-border rounded-xl px-3 py-2 text-center text-base font-mono font-bold text-content-primary focus:outline-none focus:border-brand-primary"
@@ -239,7 +435,7 @@ export const TimerModal: React.FC<TimerModalProps> = ({ isOpen, onClose }) => {
               </div>
             </div>
 
-            {/* Checkbox: Apply to active timer now */}
+            {/* Checkbox: Reset active timer to new default duration */}
             <label className="flex items-center gap-2.5 p-3 rounded-xl bg-surface-subtle border border-surface-border cursor-pointer select-none">
               <input
                 type="checkbox"
@@ -249,10 +445,11 @@ export const TimerModal: React.FC<TimerModalProps> = ({ isOpen, onClose }) => {
               />
               <div className="text-xs text-content-secondary">
                 <span className="font-semibold text-content-primary block">
-                  Update active timer immediately
+                  Reset active timer to this default value
                 </span>
                 <span>
-                  Resets the current timer to reflect the new default value
+                  Applies the default duration (${targetMinutes}m) to the active timer now
+                  Applies the default duration ({targetMinutes}m) to the active timer now
                 </span>
               </div>
             </label>

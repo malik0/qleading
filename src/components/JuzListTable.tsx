@@ -15,15 +15,24 @@ export const JuzListTable: React.FC = () => {
     toggleJuzCompleted,
   } = useApp();
 
+  const listContainerRef = useRef<HTMLDivElement | null>(null);
   const currentItemRef = useRef<HTMLDivElement | null>(null);
 
-  // Requirement: In The 30 Juz Playlist, the current playlist should always be visible in the window.
+  // Keep current Juz visible inside its own playlist container without scrolling the browser window
   useEffect(() => {
-    if (currentItemRef.current) {
-      currentItemRef.current.scrollIntoView({
-        behavior: "smooth",
-        block: "nearest",
-      });
+    if (currentItemRef.current && listContainerRef.current) {
+      const container = listContainerRef.current;
+      const item = currentItemRef.current;
+      const itemOffsetTop = item.offsetTop - container.offsetTop;
+      if (
+        itemOffsetTop < container.scrollTop ||
+        itemOffsetTop > container.scrollTop + container.clientHeight - item.clientHeight
+      ) {
+        container.scrollTo({
+          top: Math.max(0, itemOffsetTop - container.clientHeight / 2 + item.clientHeight / 2),
+          behavior: "smooth",
+        });
+      }
     }
   }, [currentJuzId]);
 
@@ -55,7 +64,7 @@ export const JuzListTable: React.FC = () => {
       </div>
 
       {/* List of 30 Juzs (Checklist) */}
-      <div className="divide-y divide-surface-border max-h-[500px] overflow-y-auto pr-1">
+      <div ref={listContainerRef} className="divide-y divide-surface-border max-h-[500px] overflow-y-auto pr-1">
         {juzList.map((item) => {
           const isCurrent = item.id === currentJuzId;
           const isDone = completedJuzs.includes(item.id);

@@ -25,6 +25,7 @@ import {
   ListChecks,
   Minus,
   Plus,
+  ArrowUp,
 } from "lucide-react";
 import { MediaDownloadsList } from "./MediaDownloadsList";
 
@@ -883,6 +884,34 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     onChange={(e) =>
                       updateSettings({
                         preferLocalAudio: e.target.checked,
+                      })
+                    }
+                    className="w-5 h-5 accent-brand-primary rounded cursor-pointer"
+                  />
+                </div>
+              </div>
+
+              {/* Floating Back to Top Button */}
+              <div className="space-y-3 pt-4 border-t border-surface-border">
+                <h4 className="text-sm font-semibold text-content-primary flex items-center gap-2">
+                  <ArrowUp className="w-4 h-4 text-brand-primary" />
+                  Navigation & Quick Actions
+                </h4>
+                <div className="flex items-center justify-between p-3.5 rounded-xl bg-surface-subtle border border-surface-border">
+                  <div>
+                    <span className="text-sm text-content-primary font-medium block">
+                      Floating Back to Top Button
+                    </span>
+                    <span className="text-xs text-content-muted">
+                      Shows a floating button to quickly return to the top after scrolling down
+                    </span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={settings.enableBackToTop ?? true}
+                    onChange={(e) =>
+                      updateSettings({
+                        enableBackToTop: e.target.checked,
                       })
                     }
                     className="w-5 h-5 accent-brand-primary rounded cursor-pointer"

@@ -146,15 +146,19 @@ export const StreakCounter: React.FC = () => {
       if (
         rec &&
         (rec.targetReached ||
-          (rec.juzCompletedCount !== undefined && rec.juzCompletedCount > 0))
+          (rec.juzCompletedCount !== undefined && rec.juzCompletedCount > 0) ||
+          (rec.completedJuzIds && rec.completedJuzIds.length > 0) ||
+          (rec.secondsRead !== undefined && rec.secondsRead > 0))
       ) {
         completedCount++;
       }
     }
-    // Also include today if completed
+    // Also include today if completed or listened to
     if (
       todayRecord.targetReached ||
-      (todayRecord.juzCompletedCount !== undefined && todayRecord.juzCompletedCount > 0)
+      (todayRecord.juzCompletedCount !== undefined && todayRecord.juzCompletedCount > 0) ||
+      (todayRecord.completedJuzIds && todayRecord.completedJuzIds.length > 0) ||
+      (todayRecord.secondsRead !== undefined && todayRecord.secondsRead > 0)
     ) {
       completedCount++;
     }
@@ -163,7 +167,13 @@ export const StreakCounter: React.FC = () => {
       completedCount,
       percent,
     };
-  }, [historyRecords, todayRecord.targetReached, todayRecord.juzCompletedCount]);
+  }, [
+    historyRecords,
+    todayRecord.targetReached,
+    todayRecord.juzCompletedCount,
+    todayRecord.completedJuzIds,
+    todayRecord.secondsRead,
+  ]);
 
   // 4.3 MONTHLY CALENDAR VIEW DAYS
   const calendarDays = useMemo(() => {
@@ -236,6 +246,42 @@ export const StreakCounter: React.FC = () => {
     todayStr,
   ]);
 
+  // Dynamically resolved stats for the day modal (reacts live during playback)
+  const liveDayStats = useMemo(() => {
+    if (!selectedDayStats) return null;
+    const isToday = selectedDayStats.dateStr === todayStr;
+    const rec = isToday ? todayRecord : historyRecords[selectedDayStats.dateStr];
+    const juzCompletedCount = isToday
+      ? todayRecord.juzCompletedCount || (todayRecord.completedJuzIds ? todayRecord.completedJuzIds.length : 0)
+      : rec?.juzCompletedCount || (rec?.completedJuzIds ? rec?.completedJuzIds.length : 0);
+    const completedJuzIds = isToday
+      ? todayRecord.completedJuzIds || []
+      : rec?.completedJuzIds || [];
+    const secondsRead = isToday ? todayRecord.secondsRead : rec?.secondsRead || 0;
+    const completed = Boolean(
+      rec?.targetReached ||
+      (isToday && todayRecord.targetReached) ||
+      juzCompletedCount > 0
+    );
+
+    return {
+      date: selectedDayStats.date,
+      dateStr: selectedDayStats.dateStr,
+      formattedDate: selectedDayStats.formattedDate,
+      secondsRead,
+      completed,
+      targetMinutes: streakTargetMinutes,
+      juzCompletedCount,
+      completedJuzIds,
+    };
+  }, [
+    selectedDayStats,
+    todayRecord,
+    historyRecords,
+    streakTargetMinutes,
+    todayStr,
+  ]);
+
   return (
     <div className="w-full bg-surface-card border border-surface-border rounded-2xl sm:rounded-3xl p-4 sm:p-6 backdrop-blur-xl shadow-xl space-y-4 transition-colors duration-200">
       {/* Top Bar: Title & Stats without daily streak icon */}
@@ -280,23 +326,17 @@ export const StreakCounter: React.FC = () => {
       <div className="pt-2">
         <div className="flex items-center justify-between gap-1 sm:gap-2">
           {weeklyDays.map((item, idx) => {
-            const CIRCLE_RADIUS = 20;
+            const CIRCLE_RADIUS = 21;
             const CIRCUMFERENCE = 2 * Math.PI * CIRCLE_RADIUS;
             const strokeDashoffset = CIRCUMFERENCE * (1 - item.progress);
 
-            // Inner badge style
-            let innerBadgeStyle = "bg-surface-subtle/70 text-content-muted"; // default / future
-
-            if (item.completed) {
-              innerBadgeStyle =
-                "bg-brand-primary text-white font-bold shadow-md scale-105";
-            } else if (item.isToday) {
-              innerBadgeStyle =
-                "bg-brand-light text-brand-primary font-bold shadow-inner";
-            } else if (item.isPast) {
-              innerBadgeStyle =
-                "bg-surface-hover text-content-muted";
-            }
+            // Daily Streak day circle background needs to be solid light blue once a single Juz is listened to or completed
+            const isListenedOrCompleted = Boolean(
+              item.completed ||
+              (item.juzCompletedCount !== undefined && item.juzCompletedCount > 0) ||
+              (item.completedJuzIds && item.completedJuzIds.length > 0) ||
+              (item.secondsRead !== undefined && item.secondsRead > 0)
+            );
 
             const tooltip = `${item.dateStr}: ${
               item.completed
@@ -328,25 +368,43 @@ export const StreakCounter: React.FC = () => {
                 }}
                 title={tooltip}
               >
-                {/* 4.1 Day Circle with Progress Bar Border */}
-                <div className="relative w-9 h-9 sm:w-12 sm:h-12 flex items-center justify-center select-none">
+                {/* 4.1 Day Circle with Solid Background & Progress Bar Border */}
+                <div
+                  className={`relative w-9 h-9 sm:w-11 sm:h-11 rounded-full flex items-center justify-center select-none transition-all duration-300 ${
+                  className={`relative w-9 h-9 sm:w-11 sm:h-11 rounded-full flex items-center justify-center select-none transition-all duration-300 shrink-0 ${
+                    isListenedOrCompleted
+                      ? "bg-sky-400 text-slate-950 font-extrabold shadow-md shadow-sky-400/25 scale-105"
+                      ? "bg-sky-400 text-slate-950 font-extrabold shadow-md shadow-sky-400/25"
+                      : item.isToday
+                      ? "bg-surface-subtle text-brand-primary font-bold shadow-inner"
+                      : item.isPast
+                      ? "bg-surface-hover text-content-muted"
+                      : "bg-surface-subtle/70 text-content-muted"
+                  }`}
+                >
                   {/* SVG Circular Border Progress Bar */}
                   <svg
                     className="absolute inset-0 w-full h-full -rotate-90 pointer-events-none"
                     viewBox="0 0 48 48"
                   >
-                    {/* Background track */}
+                    {/* Background track & fill */}
                     <circle
                       cx="24"
                       cy="24"
                       r={CIRCLE_RADIUS}
-                      fill="none"
+                      fill={isListenedOrCompleted ? "#38bdf8" : "none"}
                       stroke="currentColor"
                       strokeWidth="3"
-                      className="text-surface-border"
+                      className={
+                        isListenedOrCompleted
+                          ? "text-sky-400"
+                          : item.isToday
+                          ? "text-brand-primary/40"
+                          : "text-surface-border"
+                      }
                     />
                     {/* Progress stroke */}
-                    {item.progress > 0 && (
+                    {item.progress > 0 && !isListenedOrCompleted && (
                       <circle
                         cx="24"
                         cy="24"
@@ -357,23 +415,23 @@ export const StreakCounter: React.FC = () => {
                         strokeLinecap="round"
                         strokeDasharray={CIRCUMFERENCE}
                         strokeDashoffset={strokeDashoffset}
-                        className={`transition-all duration-500 ease-out ${
-                          item.completed
-                            ? "text-brand-primary"
-                            : item.isToday
-                            ? "text-brand-primary"
-                            : "text-brand-primary/60"
-                        }`}
+                        className="text-brand-primary transition-all duration-500 ease-out"
                       />
                     )}
                   </svg>
 
                   {/* Date Initial (M, T, W, T, F, S, S) */}
-                  <div
-                    className={`w-6.5 h-6.5 sm:w-8.5 sm:h-8.5 rounded-full flex items-center justify-center text-xs sm:text-sm font-bold transition-all z-10 ${innerBadgeStyle}`}
+                  <span
+                    className={`relative z-10 text-xs sm:text-sm font-bold transition-all ${
+                      isListenedOrCompleted
+                        ? "text-slate-950 font-extrabold"
+                        : item.isToday
+                        ? "text-brand-primary font-bold"
+                        : "text-content-muted"
+                    }`}
                   >
                     {item.dayLetter}
-                  </div>
+                  </span>
                 </div>
 
                 {/* Requirement: Little dot/circle beneath it for every Juz finished that day */}
@@ -385,19 +443,57 @@ export const StreakCounter: React.FC = () => {
                     {Array.from({ length: Math.min(item.juzCompletedCount, 4) }).map((_, dotIdx) => (
                       <span
                         key={dotIdx}
-                        className="w-1.5 h-1.5 rounded-full bg-brand-primary ring-1 ring-brand-primary/30"
+                        className={`w-1.5 h-1.5 rounded-full ${
+                          isListenedOrCompleted
+                            ? "bg-sky-400 ring-1 ring-sky-400/30"
+                            : "bg-brand-primary ring-1 ring-brand-primary/30"
+                        }`}
                       />
                     ))}
                     {item.juzCompletedCount > 4 && (
-                      <span className="text-[9px] font-bold text-brand-primary leading-none">
+                      <span
+                        className={`text-[9px] font-bold leading-none ${
+                          isListenedOrCompleted ? "text-sky-400" : "text-brand-primary"
+                        }`}
+                      >
                         +{item.juzCompletedCount - 4}
                       </span>
                     )}
                   </div>
                 ) : null}
+                {/* Requirement: Space for dots preserved even if none */}
+                <div
+                  className="h-3.5 flex items-center justify-center gap-0.5 shrink-0"
+                  title={item.juzCompletedCount > 0 ? `${item.juzCompletedCount} Juz finished` : undefined}
+                >
+                  {item.juzCompletedCount > 0 && (
+                    <>
+                      {Array.from({ length: Math.min(item.juzCompletedCount, 4) }).map((_, dotIdx) => (
+                        <span
+                          key={dotIdx}
+                          className={`w-1.5 h-1.5 rounded-full ${
+                            isListenedOrCompleted
+                              ? "bg-sky-400 ring-1 ring-sky-400/30"
+                              : "bg-brand-primary ring-1 ring-brand-primary/30"
+                          }`}
+                        />
+                      ))}
+                      {item.juzCompletedCount > 4 && (
+                        <span
+                          className={`text-[9px] font-bold leading-none ${
+                            isListenedOrCompleted ? "text-sky-400" : "text-brand-primary"
+                          }`}
+                        >
+                          +{item.juzCompletedCount - 4}
+                        </span>
+                      )}
+                    </>
+                  )}
+                </div>
 
                 {/* Date number */}
                 <span className="text-[10px] sm:text-[11px] font-mono text-content-muted">
+                <span className="text-[10px] sm:text-[11px] font-mono text-content-muted leading-none shrink-0">
                   {item.dayNum}
                 </span>
               </button>
@@ -466,12 +562,18 @@ export const StreakCounter: React.FC = () => {
                 }
 
                 let colorStyle = "bg-surface-subtle/50 border-surface-border text-content-muted/60";
-                if (dayItem.completed) {
-                  colorStyle = "bg-brand-primary text-white font-bold border-transparent shadow-sm";
+                const isListenedOrCompleted = Boolean(
+                  dayItem.completed ||
+                  (dayItem.juzCompletedCount !== undefined && dayItem.juzCompletedCount > 0) ||
+                  (dayItem.completedJuzIds && dayItem.completedJuzIds.length > 0) ||
+                  (dayItem.secondsRead !== undefined && dayItem.secondsRead > 0)
+                );
+                if (isListenedOrCompleted) {
+                  colorStyle = "bg-sky-400 text-slate-950 font-bold border-transparent shadow-sm";
                 } else if (dayItem.isPast) {
                   colorStyle = "bg-surface-hover text-content-muted border-surface-border";
                 } else if (dayItem.isToday) {
-                  colorStyle = "bg-surface-subtle border-2 border-brand-primary text-brand-primary";
+                  colorStyle = "bg-surface-subtle border-2 border-brand-primary text-brand-primary font-bold";
                 }
 
                 return (
@@ -512,7 +614,7 @@ export const StreakCounter: React.FC = () => {
                           <span
                             key={dotIdx}
                             className={`w-1 h-1 rounded-full ${
-                              dayItem.completed ? "bg-white" : "bg-brand-primary"
+                              isListenedOrCompleted ? "bg-slate-950" : "bg-brand-primary"
                             }`}
                           />
                         ))}
@@ -526,8 +628,8 @@ export const StreakCounter: React.FC = () => {
             {/* Legend */}
             <div className="pt-2 border-t border-surface-border flex items-center justify-around text-xs text-content-muted">
               <div className="flex items-center gap-1.5">
-                <span className="w-3.5 h-3.5 rounded-full bg-brand-primary inline-block" />
-                <span>Completed</span>
+                <span className="w-3.5 h-3.5 rounded-full bg-sky-400 inline-block" />
+                <span>Completed / Read</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="w-3.5 h-3.5 rounded-full bg-surface-hover border border-surface-border inline-block" />
@@ -553,110 +655,113 @@ export const StreakCounter: React.FC = () => {
       )}
 
       {/* DAY READING STATS MODAL (CLICKED FROM STREAK OR CALENDAR) */}
-      {selectedDayStats && mounted && createPortal(
-        <div
-          onClick={() => setSelectedDayStats(null)}
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-sm animate-fadeIn"
-        >
+      {(liveDayStats || selectedDayStats) && mounted && (() => {
+        const activeStats = liveDayStats || selectedDayStats;
+        if (!activeStats) return null;
+        return createPortal(
           <div
-            onClick={(e) => e.stopPropagation()}
-            className="bg-surface-card border border-surface-border rounded-2xl sm:rounded-3xl max-w-sm w-full p-4 sm:p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto"
+            onClick={() => setSelectedDayStats(null)}
+            className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-sm animate-fadeIn"
           >
-            <div className="flex items-center justify-between border-b border-surface-border pb-3">
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-xl bg-brand-light text-brand-primary">
-                  <Clock className="w-4 h-4" />
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="bg-surface-card border border-surface-border rounded-2xl sm:rounded-3xl max-w-sm w-full p-4 sm:p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between border-b border-surface-border pb-3">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-xl bg-brand-light text-brand-primary">
+                    <Clock className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-content-primary">
+                      Reading Stats
+                    </h3>
+                    <p className="text-xs text-content-muted">
+                      {activeStats.formattedDate}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-sm font-bold text-content-primary">
-                    Reading Stats
-                  </h3>
-                  <p className="text-xs text-content-muted">
-                    {selectedDayStats.formattedDate}
-                  </p>
+                <button
+                  onClick={() => setSelectedDayStats(null)}
+                  title="Close"
+                  className="p-1.5 rounded-lg bg-surface-subtle hover:bg-surface-hover text-content-muted hover:text-content-primary border border-surface-border transition"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Minutes Read Display */}
+              <div className="bg-surface-subtle border border-surface-border rounded-2xl p-4 text-center space-y-1">
+                <span className="text-xs text-content-muted font-medium uppercase tracking-wider block">
+                  Total Reading Time
+                </span>
+                <div className="text-3xl font-extrabold font-mono text-content-primary">
+                  {Math.round((activeStats.secondsRead || 0) / 60)} min
                 </div>
+                <p className="text-xs text-content-muted">
+                  Daily Goal: {activeStats.targetMinutes} minutes
+                </p>
               </div>
-              <button
-                onClick={() => setSelectedDayStats(null)}
-                title="Close"
-                className="p-1.5 rounded-lg bg-surface-subtle hover:bg-surface-hover text-content-muted hover:text-content-primary border border-surface-border transition"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
 
-            {/* Minutes Read Display */}
-            <div className="bg-surface-subtle border border-surface-border rounded-2xl p-4 text-center space-y-1">
-              <span className="text-xs text-content-muted font-medium uppercase tracking-wider block">
-                Total Reading Time
-              </span>
-              <div className="text-3xl font-extrabold font-mono text-content-primary">
-                {Math.round(selectedDayStats.secondsRead / 60)} min
+              {/* Target Status Pill */}
+              <div className="flex items-center justify-between p-3 rounded-xl bg-surface-subtle border border-surface-border">
+                <span className="text-xs font-medium text-content-secondary">
+                  Daily Goal Status
+                </span>
+                {activeStats.completed ? (
+                  <span className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-primary bg-brand-light px-2.5 py-1 rounded-full border border-brand-primary/20">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    Target Reached
+                  </span>
+                ) : (
+                  <span className="text-xs text-content-muted font-medium bg-surface-card px-2.5 py-1 rounded-full border border-surface-border">
+                    {Math.max(
+                      0,
+                      activeStats.targetMinutes -
+                        Math.round((activeStats.secondsRead || 0) / 60)
+                    )}{" "}
+                    min left
+                  </span>
+                )}
               </div>
-              <p className="text-xs text-content-muted">
-                Daily Goal: {selectedDayStats.targetMinutes} minutes
-              </p>
-            </div>
 
-            {/* Target Status Pill */}
-            <div className="flex items-center justify-between p-3 rounded-xl bg-surface-subtle border border-surface-border">
-              <span className="text-xs font-medium text-content-secondary">
-                Daily Goal Status
-              </span>
-              {selectedDayStats.completed ? (
-                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-primary bg-brand-light px-2.5 py-1 rounded-full border border-brand-primary/20">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  Target Reached
+              {/* Completed Juzes on this Day */}
+              <div className="space-y-2">
+                <span className="text-xs font-semibold text-content-muted uppercase tracking-wider block">
+                  Juzes Completed This Day ({activeStats.juzCompletedCount || 0})
                 </span>
-              ) : (
-                <span className="text-xs text-content-muted font-medium bg-surface-card px-2.5 py-1 rounded-full border border-surface-border">
-                  {Math.max(
-                    0,
-                    selectedDayStats.targetMinutes -
-                      Math.round(selectedDayStats.secondsRead / 60)
-                  )}{" "}
-                  min left
-                </span>
-              )}
-            </div>
-
-            {/* Completed Juzes on this Day */}
-            <div className="space-y-2">
-              <span className="text-xs font-semibold text-content-muted uppercase tracking-wider block">
-                Juzes Completed This Day ({selectedDayStats.juzCompletedCount})
-              </span>
-              {selectedDayStats.completedJuzIds && selectedDayStats.completedJuzIds.length > 0 ? (
-                <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
-                  {selectedDayStats.completedJuzIds.map((juzId, i) => {
-                    const jInfo = juzList.find((j) => j.id === juzId);
-                    return (
-                      <div
-                        key={`${juzId}-${i}`}
-                        className="flex items-center gap-2.5 p-2 rounded-xl bg-brand-light/30 border border-brand-primary/20"
-                      >
-                        <span className="w-6 h-6 rounded-lg bg-brand-primary text-white font-bold text-xs flex items-center justify-center shrink-0">
-                          {juzId}
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <span className="text-xs font-semibold text-content-primary truncate block">
-                            {jInfo?.customName || jInfo?.defaultName || `Juz ${juzId}`}
+                {activeStats.completedJuzIds && activeStats.completedJuzIds.length > 0 ? (
+                  <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                    {activeStats.completedJuzIds.map((juzId, i) => {
+                      const jInfo = juzList.find((j) => j.id === juzId);
+                      return (
+                        <div
+                          key={`${juzId}-${i}`}
+                          className="flex items-center gap-2.5 p-2 rounded-xl bg-brand-light/30 border border-brand-primary/20"
+                        >
+                          <span className="w-6 h-6 rounded-lg bg-brand-primary text-white font-bold text-xs flex items-center justify-center shrink-0">
+                            {juzId}
                           </span>
+                          <div className="min-w-0 flex-1">
+                            <span className="text-xs font-semibold text-content-primary truncate block">
+                              {jInfo?.customName || jInfo?.defaultName || `Juz ${juzId}`}
+                            </span>
+                          </div>
+                          <Check className="w-3.5 h-3.5 text-brand-primary shrink-0 stroke-[2.5]" />
                         </div>
-                        <Check className="w-3.5 h-3.5 text-brand-primary shrink-0 stroke-[2.5]" />
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : selectedDayStats.juzCompletedCount > 0 ? (
-                <p className="text-xs text-brand-primary font-medium p-2.5 rounded-xl bg-brand-light/40 border border-brand-primary/20">
-                  {selectedDayStats.juzCompletedCount} Juz finished on this day
-                </p>
-              ) : (
-                <p className="text-xs text-content-muted p-2 rounded-xl bg-surface-subtle text-center">
-                  No Juz finished on this date
-                </p>
-              )}
-            </div>
+                      );
+                    })}
+                  </div>
+                ) : (activeStats.juzCompletedCount || 0) > 0 ? (
+                  <p className="text-xs text-brand-primary font-medium p-2.5 rounded-xl bg-brand-light/40 border border-brand-primary/20">
+                    {activeStats.juzCompletedCount} Juz finished on this day
+                  </p>
+                ) : (
+                  <p className="text-xs text-content-muted p-2 rounded-xl bg-surface-subtle text-center">
+                    No Juz finished on this date
+                  </p>
+                )}
+              </div>
 
             <button
               onClick={() => setSelectedDayStats(null)}
@@ -667,7 +772,7 @@ export const StreakCounter: React.FC = () => {
           </div>
         </div>,
         document.body
-      )}
+      )})()}
 
       {/* DAILY STREAK TARGET MODAL */}
       {showTargetModal && mounted && createPortal(

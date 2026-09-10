@@ -8,7 +8,7 @@ import {
   hashPassword,
   verifyPassword,
 } from "../../../lib/auth";
-import { AccountResetPayload, UserState } from "../../../types/quran";
+import { AccountResetPayload, AppSettings, UserState } from "../../../types/quran";
 
 /**
  * Extracts session token from Cookie header or Authorization header.
@@ -87,6 +87,19 @@ function rowToUserState(row: any, user: { id: string; username: string; email: s
   };
 }
 
+/**
+ * Converts a D1 user_state row's settings_json to an AppSettings object.
+ */
+function rowToSettings(row: any): AppSettings | null {
+  if (!row?.settings_json) return null;
+  try {
+    const parsed = JSON.parse(row.settings_json);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 // GET: Current user session lookup (/api/auth?action=me)
 export async function GET(req: Request) {
   try {
@@ -134,6 +147,7 @@ export async function GET(req: Request) {
       .first<any>();
 
     const userState = rowToUserState(stateRow, user);
+    const userSettings = rowToSettings(stateRow);
 
     return NextResponse.json({
       success: true,
@@ -145,6 +159,7 @@ export async function GET(req: Request) {
         createdAt: user.created_at,
       },
       state: userState,
+      settings: userSettings,
     });
   } catch (error: any) {
     console.error("Auth GET error:", error);
@@ -259,6 +274,7 @@ export async function POST(req: Request) {
         randomCredentials: creds,
         token,
         state: userState,
+        settings: body.settings || null,
         message: "Random account generated and authenticated",
       });
 
@@ -357,6 +373,7 @@ export async function POST(req: Request) {
         user: { id: userId, username: cleanUsername, email: email.toLowerCase().trim(), createdAt: nowIso },
         token,
         state: userState,
+        settings: body.settings || null,
       });
 
       res.headers.set("Set-Cookie", createSessionCookie(token));
@@ -399,12 +416,14 @@ export async function POST(req: Request) {
         .first<any>();
 
       const userState = rowToUserState(stateRow, user);
+      const userSettings = rowToSettings(stateRow);
 
       const res = NextResponse.json({
         success: true,
         user: { id: user.id, username: user.username, email: user.email, createdAt: user.created_at },
         token,
         state: userState,
+        settings: userSettings,
       });
 
       res.headers.set("Set-Cookie", createSessionCookie(token));
