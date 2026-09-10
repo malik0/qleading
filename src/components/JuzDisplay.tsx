@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { createPortal } from "react-dom";
 import { useApp } from "../context/AppContext";
 import { formatAudioTime, formatHeroTimer } from "../lib/utils";
 import { ChevronDown, Volume2, SlidersHorizontal, Clock, X } from "lucide-react";
@@ -41,7 +40,8 @@ export const JuzDisplay: React.FC = () => {
     if (isDropdownOpen && listContainerRef.current) {
       const currentIdx = juzList.findIndex((item) => item.id === currentJuzId);
       if (currentIdx !== -1) {
-        const targetScrollTop = Math.max(0, (currentIdx - 2) * 54);
+        const itemStep = 56; // 52px item height + 4px gap
+        const targetScrollTop = Math.max(0, (currentIdx - 2) * itemStep);
         listContainerRef.current.scrollTop = targetScrollTop;
         const raf = requestAnimationFrame(() => {
           if (listContainerRef.current) {
@@ -243,15 +243,6 @@ export const JuzDisplay: React.FC = () => {
               />
             </button>
 
-            {/* 1.2 DROPDOWN MENU FOR NEARBY JUZS (2 above & 2 below current playing Juz) */}
-            {isDropdownOpen && (() => {
-              const currentIdx = juzList.findIndex((item) => item.id === currentJuzId);
-              const startIdx = Math.max(0, currentIdx >= 0 ? currentIdx - 2 : 0);
-              const endIdx = Math.min(
-                juzList.length,
-                currentIdx >= 0 ? currentIdx + 3 : 5
-              );
-              const nearbyJuzList = juzList.slice(startIdx, endIdx);
             {/* 1.2 DROPDOWN MENU FOR ALL 30 JUZS (Scrollable, 5 items visible at a time) */}
             {isDropdownOpen && (
               <>
@@ -261,15 +252,6 @@ export const JuzDisplay: React.FC = () => {
                   onClick={() => setIsDropdownOpen(false)}
                 />
 
-              return (
-                <>
-                  {/* Desktop Dropdown Popover (>= sm) */}
-                  <div className="hidden sm:block absolute left-1/2 -translate-x-1/2 mt-2 w-80 bg-surface-card border border-surface-border rounded-2xl shadow-2xl p-2 z-50 divide-y divide-surface-border animate-fadeIn overflow-hidden">
-                    <div className="px-3.5 py-2 text-xs font-bold uppercase tracking-wider text-content-muted flex items-center justify-between">
-                      <span>Select Juz</span>
-                      <span className="text-[10px] font-medium font-mono text-content-muted/80">
-                        Nearby
-                      </span>
                 <div className="absolute left-1/2 -translate-x-1/2 mt-2 w-[min(22rem,calc(100vw-2rem))] sm:w-84 bg-surface-card border border-surface-border rounded-2xl shadow-2xl z-50 animate-fadeIn overflow-hidden">
                   {/* Dropdown Header */}
                   <div className="px-3.5 py-2 text-xs font-bold uppercase tracking-wider text-content-muted flex items-center justify-between border-b border-surface-border bg-surface-subtle/50">
@@ -277,125 +259,27 @@ export const JuzDisplay: React.FC = () => {
                       <Volume2 className="w-3.5 h-3.5 text-brand-primary" />
                       <span>Select Juz (1–30)</span>
                     </div>
-                    <div className="py-1 space-y-1">
-                      {nearbyJuzList.map((item) => {
-                        const isCurrent = item.id === currentJuzId;
-                        const displayName = item.customName || item.defaultName;
-                        const displayRange = item.customRange || item.defaultRange;
-
-                        return (
-                          <button
-                            key={`desktop-${item.id}`}
-                            onClick={() => {
-                              selectJuz(item.id);
-                              setIsDropdownOpen(false);
-                            }}
-                            className={`w-full text-left px-3 py-2 rounded-xl flex flex-col gap-0.5 transition cursor-pointer ${
-                              isCurrent
-                                ? "bg-brand-primary text-white font-semibold shadow-md"
-                                : "hover:bg-surface-subtle text-content-secondary hover:text-content-primary"
-                            }`}
-                          >
-                            <div className="flex items-center justify-between w-full">
-                              <div className="flex items-center gap-2 min-w-0">
-                                <span
-                                  className={`w-5 h-5 rounded-md flex items-center justify-center font-bold text-xs shrink-0 ${
-                                    isCurrent
-                                      ? "bg-white/20 text-white shadow-xs"
-                                      : "bg-surface-subtle text-content-muted border border-surface-border"
-                                  }`}
-                                >
-                                  {item.id}
-                                </span>
-                                <span className="font-bold text-sm truncate">
-                                  {displayName}
-                                </span>
-                              </div>
-                              {isCurrent && (
-                                <span className="text-[10px] bg-white/25 text-white font-bold px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0">
-                                  Playing
-                                </span>
-                              )}
-                            </div>
-                            <div
-                              className={`text-xs truncate w-full pl-7 ${
-                                isCurrent ? "text-white/85 font-medium" : "text-content-muted font-normal"
-                              }`}
-                              title={displayRange}
-                            >
-                              {displayRange}
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Mobile Bottom Sheet Modal (< sm) portaled to document.body */}
-                  {mounted && typeof document !== "undefined" && createPortal(
-                    <div
-                      className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-end justify-center sm:hidden animate-fadeIn"
                     <button
                       type="button"
                       onClick={() => setIsDropdownOpen(false)}
-                      role="dialog"
-                      aria-modal="true"
-                      aria-label="Select Nearby Juz"
                       className="p-1 rounded-lg hover:bg-surface-hover text-content-muted hover:text-content-primary transition cursor-pointer"
                       title="Close dropdown"
                       aria-label="Close"
                     >
-                      <div
-                        className="w-full bg-surface-card border-t border-surface-border rounded-t-3xl p-4 pb-8 max-h-[85vh] overflow-y-auto shadow-2xl animate-slideUp text-left"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {/* Pull handle indicator */}
-                        <div className="w-10 h-1 rounded-full bg-surface-border mx-auto mb-3" />
                       <X className="w-4 h-4" />
                     </button>
                   </div>
 
-                        {/* Header */}
-                        <div className="flex items-center justify-between pb-3 mb-2 border-b border-surface-border">
-                          <div className="flex items-center gap-2">
-                            <Volume2 className="w-4 h-4 text-brand-primary" />
-                            <span className="font-bold text-sm text-content-primary">
-                              Select Nearby Juz
-                            </span>
-                          </div>
-                          <button
-                            onClick={() => setIsDropdownOpen(false)}
-                            className="p-1 rounded-lg hover:bg-surface-hover text-content-muted hover:text-content-primary transition cursor-pointer"
-                            aria-label="Close"
-                          >
-                            <X className="w-5 h-5" />
-                          </button>
-                        </div>
-                  {/* Scrollable list of all 30 Juzes - exactly 5 items visible at 54px each = 270px */}
+                  {/* Scrollable list of all 30 Juzes - exactly 5 items visible at a time */}
                   <div
                     ref={listContainerRef}
-                    className="h-[270px] overflow-y-auto scrollbar-thin p-1.5 space-y-1 divide-y divide-surface-border/40"
+                    className="h-[288px] overflow-y-auto scrollbar-thin p-1.5 flex flex-col gap-1"
                   >
                     {juzList.map((item) => {
                       const isCurrent = item.id === currentJuzId;
                       const displayName = item.customName || item.defaultName;
                       const displayRange = item.customRange || item.defaultRange;
 
-                        {/* List of 5 Nearby Juzes */}
-                        <div className="space-y-1.5">
-                          {nearbyJuzList.map((item) => {
-                            const isCurrent = item.id === currentJuzId;
-                            const displayName = item.customName || item.defaultName;
-                            const displayRange = item.customRange || item.defaultRange;
-
-                            return (
-                              <button
-                                key={`mobile-${item.id}`}
-                                onClick={() => {
-                                  selectJuz(item.id);
-                                  setIsDropdownOpen(false);
-                                }}
-                                className={`w-full text-left px-3.5 py-2.5 rounded-xl flex flex-col gap-0.5 transition cursor-pointer ${
                       return (
                         <button
                           key={item.id}
@@ -404,7 +288,7 @@ export const JuzDisplay: React.FC = () => {
                             selectJuz(item.id);
                             setIsDropdownOpen(false);
                           }}
-                          className={`w-full h-[54px] shrink-0 text-left px-3 py-1.5 rounded-xl flex flex-col justify-center gap-0.5 transition cursor-pointer ${
+                          className={`w-full h-[52px] shrink-0 text-left px-3 py-1 rounded-xl flex flex-col justify-center gap-0.5 transition cursor-pointer ${
                             isCurrent
                               ? "bg-brand-primary text-white font-semibold shadow-md"
                               : "hover:bg-surface-subtle active:bg-surface-subtle/80 text-content-secondary hover:text-content-primary"
@@ -415,52 +299,10 @@ export const JuzDisplay: React.FC = () => {
                               <span
                                 className={`w-5 h-5 rounded-md flex items-center justify-center font-bold text-xs shrink-0 ${
                                   isCurrent
-                                    ? "bg-brand-primary text-white font-semibold shadow-md"
-                                    : "hover:bg-surface-subtle active:bg-surface-subtle/80 text-content-secondary hover:text-content-primary border border-surface-border/60"
                                     ? "bg-white/20 text-white shadow-xs"
                                     : "bg-surface-subtle text-content-muted border border-surface-border"
                                 }`}
                               >
-                                <div className="flex items-center justify-between w-full">
-                                  <div className="flex items-center gap-2 min-w-0">
-                                    <span
-                                      className={`w-6 h-6 rounded-md flex items-center justify-center font-bold text-xs shrink-0 ${
-                                        isCurrent
-                                          ? "bg-white/20 text-white shadow-xs"
-                                          : "bg-surface-subtle text-content-muted border border-surface-border"
-                                      }`}
-                                    >
-                                      {item.id}
-                                    </span>
-                                    <span className="font-bold text-sm truncate">
-                                      {displayName}
-                                    </span>
-                                  </div>
-                                  {isCurrent && (
-                                    <span className="text-[10px] bg-white/25 text-white font-bold px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0">
-                                      Playing
-                                    </span>
-                                  )}
-                                </div>
-                                <div
-                                  className={`text-xs truncate w-full pl-8 ${
-                                    isCurrent ? "text-white/85 font-medium" : "text-content-muted font-normal"
-                                  }`}
-                                  title={displayRange}
-                                >
-                                  {displayRange}
-                                </div>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </div>,
-                    document.body
-                  )}
-                </>
-              );
-            })()}
                                 {item.id}
                               </span>
                               <span className="font-bold text-sm truncate">
@@ -490,6 +332,7 @@ export const JuzDisplay: React.FC = () => {
                 </div>
               </>
             )}
+          
           </div>
         </div>
 
