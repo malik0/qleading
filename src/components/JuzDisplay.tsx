@@ -6,6 +6,14 @@ import { formatAudioTime, formatHeroTimer } from "../lib/utils";
 import { ChevronDown, Volume2, SlidersHorizontal, Clock, X } from "lucide-react";
 import { TimerModal } from "./TimerModal";
 
+const formatDisplayRange = (range: string) => {
+  if (!range) return "";
+  return range
+    .replace(/^Surah\s+/i, "")
+    .replace(/\s+to\s+Surah\s+/gi, " → ")
+    .replace(/\s+to\s+/gi, " → ");
+};
+
 export const JuzDisplay: React.FC = () => {
   const {
     juzList,
@@ -252,7 +260,7 @@ export const JuzDisplay: React.FC = () => {
                   onClick={() => setIsDropdownOpen(false)}
                 />
 
-                <div className="absolute left-1/2 -translate-x-1/2 mt-2 w-[min(22rem,calc(100vw-2rem))] sm:w-84 bg-surface-card border border-surface-border rounded-2xl shadow-2xl z-50 animate-fadeIn overflow-hidden">
+                <div className="absolute left-1/2 -translate-x-1/2 mt-2 w-[calc(100vw-2rem)] sm:w-96 max-w-md bg-surface-card border border-surface-border rounded-2xl shadow-2xl z-50 animate-fadeIn overflow-hidden">
                   {/* Dropdown Header */}
                   <div className="px-3.5 py-2 text-xs font-bold uppercase tracking-wider text-content-muted flex items-center justify-between border-b border-surface-border bg-surface-subtle/50">
                     <div className="flex items-center gap-1.5">
@@ -288,42 +296,45 @@ export const JuzDisplay: React.FC = () => {
                             selectJuz(item.id);
                             setIsDropdownOpen(false);
                           }}
-                          className={`w-full h-[52px] shrink-0 text-left px-3 py-1 rounded-xl flex flex-col justify-center gap-0.5 transition cursor-pointer ${
+                          className={`w-full h-[52px] shrink-0 text-left px-2.5 sm:px-3 py-1.5 rounded-xl flex items-center gap-2.5 transition cursor-pointer ${
                             isCurrent
                               ? "bg-brand-primary text-white font-semibold shadow-md"
                               : "hover:bg-surface-subtle active:bg-surface-subtle/80 text-content-secondary hover:text-content-primary"
                           }`}
                         >
-                          <div className="flex items-center justify-between w-full">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span
-                                className={`w-5 h-5 rounded-md flex items-center justify-center font-bold text-xs shrink-0 ${
-                                  isCurrent
-                                    ? "bg-white/20 text-white shadow-xs"
-                                    : "bg-surface-subtle text-content-muted border border-surface-border"
-                                }`}
-                              >
-                                {item.id}
-                              </span>
-                              <span className="font-bold text-sm truncate">
+                          {/* Left: Juz Number Badge */}
+                          <span
+                            className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 ${
+                              isCurrent
+                                ? "bg-white/20 text-white shadow-xs"
+                                : "bg-surface-subtle text-content-muted border border-surface-border"
+                            }`}
+                          >
+                            {item.id}
+                          </span>
+
+                          {/* Right: Juz Title & Range */}
+                          <div className="flex-1 min-w-0 flex flex-col justify-center">
+                            <div className="flex items-center justify-between gap-1 w-full">
+                              <span className="font-bold text-xs sm:text-sm truncate">
                                 {displayName}
                               </span>
+                              {isCurrent && (
+                                <span className="text-[9px] sm:text-[10px] bg-white/25 text-white font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider shrink-0">
+                                  Playing
+                                </span>
+                              )}
                             </div>
-                            {isCurrent && (
-                              <span className="text-[10px] bg-white/25 text-white font-bold px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0">
-                                Playing
-                              </span>
-                            )}
-                          </div>
-                          <div
-                            className={`text-xs truncate w-full pl-7 ${
-                              isCurrent
-                                ? "text-white/85 font-medium"
-                                : "text-content-muted font-normal"
-                            }`}
-                            title={displayRange}
-                          >
-                            {displayRange}
+                            <div
+                              className={`text-[10.5px] sm:text-xs truncate w-full leading-tight tracking-tight ${
+                                isCurrent
+                                  ? "text-white/85 font-medium"
+                                  : "text-content-muted font-normal"
+                              }`}
+                              title={displayRange}
+                            >
+                              {formatDisplayRange(displayRange)}
+                            </div>
                           </div>
                         </button>
                       );
