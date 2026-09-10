@@ -256,22 +256,25 @@ export const JuzDisplay: React.FC = () => {
               <>
                 {/* Backdrop to dismiss when clicking/tapping outside */}
                 <div
-                  className="fixed inset-0 z-40 bg-black/40 backdrop-blur-xs sm:bg-black/10"
+                  className="fixed inset-0 z-40 bg-black/20 sm:bg-transparent"
                   onClick={() => setIsDropdownOpen(false)}
                 />
 
-                {/* Dropdown Container: Centered on mobile viewport, positioned under button on desktop */}
-                <div className="fixed sm:absolute left-1/2 top-1/2 sm:top-full -translate-x-1/2 -translate-y-1/2 sm:translate-y-0 sm:mt-2 w-[calc(100vw-2rem)] sm:w-96 max-w-sm sm:max-w-md bg-surface-card border border-surface-border rounded-2xl shadow-2xl z-50 animate-fadeIn overflow-hidden">
+                {/* Dropdown Container: Centered horizontally under the button */}
+                <div
+                  className="absolute left-1/2 mt-2 w-[min(22rem,calc(100vw-2rem))] sm:w-84 bg-surface-card border border-surface-border rounded-2xl shadow-2xl z-50 animate-fadeIn overflow-hidden"
+                  style={{ transform: "translateX(-50%)" }}
+                >
                   {/* Dropdown Header */}
-                  <div className="relative px-3.5 py-2.5 text-xs font-bold uppercase tracking-wider text-content-muted flex items-center justify-center border-b border-surface-border bg-surface-subtle/50">
-                    <div className="flex items-center gap-1.5 text-content-primary">
+                  <div className="px-3.5 py-2 text-xs font-bold uppercase tracking-wider text-content-muted flex items-center justify-between border-b border-surface-border bg-surface-subtle/50">
+                    <div className="flex items-center gap-1.5">
                       <Volume2 className="w-3.5 h-3.5 text-brand-primary" />
                       <span>Select Juz (1–30)</span>
                     </div>
                     <button
                       type="button"
                       onClick={() => setIsDropdownOpen(false)}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-lg hover:bg-surface-hover text-content-muted hover:text-content-primary transition cursor-pointer"
+                      className="p-1 rounded-lg hover:bg-surface-hover text-content-muted hover:text-content-primary transition cursor-pointer"
                       title="Close dropdown"
                       aria-label="Close"
                     >
@@ -297,34 +300,45 @@ export const JuzDisplay: React.FC = () => {
                             selectJuz(item.id);
                             setIsDropdownOpen(false);
                           }}
-                          className={`w-full h-[52px] shrink-0 text-center px-3 py-1.5 rounded-xl flex flex-col items-center justify-center gap-0.5 transition cursor-pointer ${
+                          className={`w-full h-[52px] shrink-0 text-left px-2.5 sm:px-3 py-1.5 rounded-xl flex items-center gap-2.5 transition cursor-pointer ${
                             isCurrent
                               ? "bg-brand-primary text-white font-semibold shadow-md"
                               : "hover:bg-surface-subtle active:bg-surface-subtle/80 text-content-secondary hover:text-content-primary"
                           }`}
                         >
-                          {/* Line 1: Juz Name & Playing badge centered */}
-                          <div className="flex items-center justify-center gap-1.5 max-w-full">
-                            <span className="font-bold text-xs sm:text-sm truncate">
-                              {displayName}
-                            </span>
-                            {isCurrent && (
-                              <span className="text-[9px] sm:text-[10px] bg-white/25 text-white font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider shrink-0">
-                                Playing
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Line 2: Surah Range centered */}
-                          <div
-                            className={`text-[10.5px] sm:text-xs truncate max-w-full leading-tight tracking-tight text-center ${
+                          {/* Left: Juz Number Badge */}
+                          <span
+                            className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 ${
                               isCurrent
-                                ? "text-white/85 font-medium"
-                                : "text-content-muted font-normal"
+                                ? "bg-white/20 text-white shadow-xs"
+                                : "bg-surface-subtle text-content-muted border border-surface-border"
                             }`}
-                            title={displayRange}
                           >
-                            {formatDisplayRange(displayRange)}
+                            {item.id}
+                          </span>
+
+                          {/* Right: Juz Title & Range (Left aligned) */}
+                          <div className="flex-1 min-w-0 flex flex-col justify-center text-left">
+                            <div className="flex items-center justify-between gap-1 w-full">
+                              <span className="font-bold text-xs sm:text-sm truncate">
+                                {displayName}
+                              </span>
+                              {isCurrent && (
+                                <span className="text-[9px] sm:text-[10px] bg-white/25 text-white font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider shrink-0">
+                                  Playing
+                                </span>
+                              )}
+                            </div>
+                            <div
+                              className={`text-[10.5px] sm:text-xs truncate w-full leading-tight tracking-tight text-left ${
+                                isCurrent
+                                  ? "text-white/85 font-medium"
+                                  : "text-content-muted font-normal"
+                              }`}
+                              title={displayRange}
+                            >
+                              {formatDisplayRange(displayRange)}
+                            </div>
                           </div>
                         </button>
                       );
