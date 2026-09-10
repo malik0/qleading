@@ -4,7 +4,6 @@ import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useApp } from "../context/AppContext";
 import { formatAudioTime, formatHeroTimer } from "../lib/utils";
-import { ChevronDown, Volume2, SlidersHorizontal, Clock } from "lucide-react";
 import { ChevronDown, Volume2, SlidersHorizontal, Clock, X } from "lucide-react";
 import { TimerModal } from "./TimerModal";
 
@@ -44,18 +43,15 @@ export const JuzDisplay: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Close dropdown when clicking outside
   // Close dropdown when clicking outside (desktop & mobile)
   useEffect(() => {
     if (!isDropdownOpen) return;
-    const handleClickOutside = (e: MouseEvent) => {
     const handleClickOutside = (e: MouseEvent | TouchEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setIsDropdownOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
     document.addEventListener("touchstart", handleClickOutside);
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
@@ -170,7 +166,6 @@ export const JuzDisplay: React.FC = () => {
 
           {/* Huge Hero Timer Typography */}
           <div
-            className="select-none tracking-tight font-extrabold text-content-primary text-5xl sm:text-7xl md:text-8xl lg:text-9xl font-mono transition-all group-hover:brightness-110"
             className="select-none tracking-tight font-extrabold text-content-primary text-5xl sm:text-7xl md:text-8xl lg:text-9xl font-mono transition-all group-hover:brightness-110 whitespace-nowrap"
             style={{
               filter: "drop-shadow(0 10px 25px var(--color-primary-glow))",
@@ -241,12 +236,6 @@ export const JuzDisplay: React.FC = () => {
               const nearbyJuzList = juzList.slice(startIdx, endIdx);
 
               return (
-                <div className="absolute left-1/2 -translate-x-1/2 mt-2 w-[92vw] max-w-sm sm:w-96 bg-surface-card border border-surface-border rounded-2xl shadow-2xl p-2 z-50 divide-y divide-surface-border animate-fadeIn overflow-hidden">
-                  <div className="px-3.5 py-2 text-xs font-bold uppercase tracking-wider text-content-muted flex items-center justify-between">
-                    <span>Select Juz</span>
-                    <span className="text-[10px] font-medium font-mono text-content-muted/80">
-                      Nearby
-                    </span>
                 <>
                   {/* Desktop Dropdown Popover (>= sm) */}
                   <div className="hidden sm:block absolute left-1/2 -translate-x-1/2 mt-2 w-80 bg-surface-card border border-surface-border rounded-2xl shadow-2xl p-2 z-50 divide-y divide-surface-border animate-fadeIn overflow-hidden">
@@ -309,29 +298,7 @@ export const JuzDisplay: React.FC = () => {
                       })}
                     </div>
                   </div>
-                  <div className="py-1 space-y-1">
-                    {nearbyJuzList.map((item) => {
-                      const isCurrent = item.id === currentJuzId;
-                      const displayName = item.customName || item.defaultName;
-                      const displayRange = item.customRange || item.defaultRange;
 
-                      return (
-                        <button
-                          key={item.id}
-                          onClick={() => {
-                            selectJuz(item.id);
-                            setIsDropdownOpen(false);
-                          }}
-                          className={`w-full text-left px-3 py-2 rounded-xl flex flex-col gap-0.5 transition cursor-pointer ${
-                            isCurrent
-                              ? "bg-brand-primary text-white font-semibold shadow-md"
-                              : "hover:bg-surface-subtle text-content-secondary hover:text-content-primary"
-                          }`}
-                        >
-                          <div className="flex items-center justify-between w-full">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span
-                                className={`w-5 h-5 rounded-md flex items-center justify-center font-bold text-xs shrink-0 ${
                   {/* Mobile Bottom Sheet Modal (< sm) portaled to document.body */}
                   {mounted && typeof document !== "undefined" && createPortal(
                     <div
@@ -381,37 +348,10 @@ export const JuzDisplay: React.FC = () => {
                                 }}
                                 className={`w-full text-left px-3.5 py-2.5 rounded-xl flex flex-col gap-0.5 transition cursor-pointer ${
                                   isCurrent
-                                    ? "bg-white/20 text-white shadow-xs"
-                                    : "bg-surface-subtle text-content-muted border border-surface-border"
                                     ? "bg-brand-primary text-white font-semibold shadow-md"
                                     : "hover:bg-surface-subtle active:bg-surface-subtle/80 text-content-secondary hover:text-content-primary border border-surface-border/60"
                                 }`}
                               >
-                                {item.id}
-                              </span>
-                              <span className="font-bold text-sm truncate">
-                                {displayName}
-                              </span>
-                            </div>
-                            {isCurrent && (
-                              <span className="text-[10px] bg-white/25 text-white font-bold px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0">
-                                Playing
-                              </span>
-                            )}
-                          </div>
-                          <div
-                            className={`text-xs truncate w-full pl-7 ${
-                              isCurrent ? "text-white/85 font-medium" : "text-content-muted font-normal"
-                            }`}
-                            title={displayRange}
-                          >
-                            {displayRange}
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
                                 <div className="flex items-center justify-between w-full">
                                   <div className="flex items-center gap-2 min-w-0">
                                     <span
