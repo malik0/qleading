@@ -697,8 +697,11 @@ export const KhatmPlanner: React.FC = () => {
               }}
               className="text-[10px] text-content-muted hover:text-brand-primary active:scale-95 flex items-center justify-end gap-1 sm:hidden cursor-pointer transition select-none ml-auto py-0.5 focus:outline-none"
               title="Focus current date in track"
+              className="text-[11px] font-semibold text-brand-primary bg-brand-light hover:bg-brand-light/70 border border-brand-primary/25 rounded-lg px-2.5 py-1 active:scale-95 flex items-center justify-end gap-1.5 sm:hidden cursor-pointer transition select-none ml-auto shadow-xs focus:outline-none"
+              title="Scroll and focus current date in track"
             >
               <span>Scroll track</span>
+              <span>Scroll track to Today</span>
               <span>→</span>
             </button>
 

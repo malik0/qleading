@@ -158,6 +158,7 @@ export const ReadingChart: React.FC = () => {
                 type="button"
                 onClick={() => scrollToCurrentHour("smooth")}
                 className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-[11px] font-semibold text-brand-primary bg-brand-light hover:bg-brand-light/70 border border-brand-primary/20 transition-all shadow-sm active:scale-95 cursor-pointer ml-auto sm:ml-0"
+                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-[11px] font-semibold text-brand-primary bg-brand-light hover:bg-brand-light/70 border border-brand-primary/20 transition-all shadow-sm active:scale-95 cursor-pointer shrink-0 ml-auto sm:ml-0"
                 title="Center focus current hour"
               >
                 <span className="relative flex h-2 w-2">
@@ -177,11 +178,13 @@ export const ReadingChart: React.FC = () => {
               onClick={() => setSelectedDayOffset((prev) => prev + 1)}
               title="View Previous Day"
               className="p-1 rounded-lg bg-surface-subtle hover:bg-surface-hover text-content-secondary hover:text-content-primary border border-surface-border transition shadow-sm cursor-pointer active:scale-95 flex items-center justify-center"
+              className="p-1 rounded-lg bg-surface-subtle hover:bg-surface-hover text-content-secondary hover:text-content-primary border border-surface-border transition shadow-sm cursor-pointer active:scale-95 flex items-center justify-center shrink-0"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
 
             <span className="text-xs font-semibold text-content-primary font-mono px-2 py-0.5 rounded-lg bg-surface-subtle border border-surface-border select-none">
+            <span className="text-xs font-semibold text-content-primary font-mono px-2 py-0.5 rounded-lg bg-surface-subtle border border-surface-border select-none shrink-0">
               {formattedDayLabel}
             </span>
 
@@ -191,6 +194,7 @@ export const ReadingChart: React.FC = () => {
               disabled={isSelectedDayToday}
               title={isSelectedDayToday ? "Today is the latest date" : "View Next Day"}
               className={`p-1 rounded-lg border transition shadow-sm flex items-center justify-center ${
+              className={`p-1 rounded-lg border transition shadow-sm flex items-center justify-center shrink-0 ${
                 isSelectedDayToday
                   ? "bg-surface-subtle/40 border-surface-border/50 text-content-muted/40 cursor-not-allowed"
                   : "bg-surface-subtle hover:bg-surface-hover text-content-secondary hover:text-content-primary border border-surface-border cursor-pointer active:scale-95"
@@ -204,6 +208,7 @@ export const ReadingChart: React.FC = () => {
                 type="button"
                 onClick={() => setSelectedDayOffset(0)}
                 className="px-2 py-0.5 rounded-lg text-[10px] font-bold text-brand-primary bg-brand-light hover:bg-brand-light/70 border border-brand-primary/20 transition cursor-pointer"
+                className="px-2 py-0.5 rounded-lg text-[10px] font-bold text-brand-primary bg-brand-light hover:bg-brand-light/70 border border-brand-primary/20 transition cursor-pointer shrink-0"
                 title="Jump back to Today"
               >
                 Today
@@ -213,6 +218,7 @@ export const ReadingChart: React.FC = () => {
         </div>
 
         <div className="text-right flex flex-col items-end shrink-0">
+        <div className="text-right flex flex-col items-end shrink-0 w-full sm:w-auto">
           <span className="text-xs text-content-muted block font-medium">
             {isSelectedDayToday ? "Total Today" : "Total for Day"}
           </span>

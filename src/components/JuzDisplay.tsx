@@ -1,9 +1,11 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useApp } from "../context/AppContext";
 import { formatAudioTime, formatHeroTimer } from "../lib/utils";
 import { ChevronDown, Volume2, SlidersHorizontal, Clock } from "lucide-react";
+import { ChevronDown, Volume2, SlidersHorizontal, Clock, X } from "lucide-react";
 import { TimerModal } from "./TimerModal";
 
 export const JuzDisplay: React.FC = () => {
@@ -27,7 +29,12 @@ export const JuzDisplay: React.FC = () => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isTimerModalOpen, setIsTimerModalOpen] = useState(false);
   const [currentDateTime, setCurrentDateTime] = useState<Date | null>(null);
+  const [mounted, setMounted] = useState(false);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     setCurrentDateTime(new Date());
@@ -38,15 +45,22 @@ export const JuzDisplay: React.FC = () => {
   }, []);
 
   // Close dropdown when clicking outside
+  // Close dropdown when clicking outside (desktop & mobile)
   useEffect(() => {
     if (!isDropdownOpen) return;
     const handleClickOutside = (e: MouseEvent) => {
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setIsDropdownOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener("touchstart", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("touchstart", handleClickOutside);
+    };
   }, [isDropdownOpen]);
 
   // Time remaining adjusted for playback speed (Requirement 1.3)
@@ -157,6 +171,7 @@ export const JuzDisplay: React.FC = () => {
           {/* Huge Hero Timer Typography */}
           <div
             className="select-none tracking-tight font-extrabold text-content-primary text-5xl sm:text-7xl md:text-8xl lg:text-9xl font-mono transition-all group-hover:brightness-110"
+            className="select-none tracking-tight font-extrabold text-content-primary text-5xl sm:text-7xl md:text-8xl lg:text-9xl font-mono transition-all group-hover:brightness-110 whitespace-nowrap"
             style={{
               filter: "drop-shadow(0 10px 25px var(--color-primary-glow))",
             }}
@@ -232,6 +247,67 @@ export const JuzDisplay: React.FC = () => {
                     <span className="text-[10px] font-medium font-mono text-content-muted/80">
                       Nearby
                     </span>
+                <>
+                  {/* Desktop Dropdown Popover (>= sm) */}
+                  <div className="hidden sm:block absolute left-1/2 -translate-x-1/2 mt-2 w-80 bg-surface-card border border-surface-border rounded-2xl shadow-2xl p-2 z-50 divide-y divide-surface-border animate-fadeIn overflow-hidden">
+                    <div className="px-3.5 py-2 text-xs font-bold uppercase tracking-wider text-content-muted flex items-center justify-between">
+                      <span>Select Juz</span>
+                      <span className="text-[10px] font-medium font-mono text-content-muted/80">
+                        Nearby
+                      </span>
+                    </div>
+                    <div className="py-1 space-y-1">
+                      {nearbyJuzList.map((item) => {
+                        const isCurrent = item.id === currentJuzId;
+                        const displayName = item.customName || item.defaultName;
+                        const displayRange = item.customRange || item.defaultRange;
+
+                        return (
+                          <button
+                            key={`desktop-${item.id}`}
+                            onClick={() => {
+                              selectJuz(item.id);
+                              setIsDropdownOpen(false);
+                            }}
+                            className={`w-full text-left px-3 py-2 rounded-xl flex flex-col gap-0.5 transition cursor-pointer ${
+                              isCurrent
+                                ? "bg-brand-primary text-white font-semibold shadow-md"
+                                : "hover:bg-surface-subtle text-content-secondary hover:text-content-primary"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between w-full">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span
+                                  className={`w-5 h-5 rounded-md flex items-center justify-center font-bold text-xs shrink-0 ${
+                                    isCurrent
+                                      ? "bg-white/20 text-white shadow-xs"
+                                      : "bg-surface-subtle text-content-muted border border-surface-border"
+                                  }`}
+                                >
+                                  {item.id}
+                                </span>
+                                <span className="font-bold text-sm truncate">
+                                  {displayName}
+                                </span>
+                              </div>
+                              {isCurrent && (
+                                <span className="text-[10px] bg-white/25 text-white font-bold px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0">
+                                  Playing
+                                </span>
+                              )}
+                            </div>
+                            <div
+                              className={`text-xs truncate w-full pl-7 ${
+                                isCurrent ? "text-white/85 font-medium" : "text-content-muted font-normal"
+                              }`}
+                              title={displayRange}
+                            >
+                              {displayRange}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                   <div className="py-1 space-y-1">
                     {nearbyJuzList.map((item) => {
@@ -256,9 +332,59 @@ export const JuzDisplay: React.FC = () => {
                             <div className="flex items-center gap-2 min-w-0">
                               <span
                                 className={`w-5 h-5 rounded-md flex items-center justify-center font-bold text-xs shrink-0 ${
+                  {/* Mobile Bottom Sheet Modal (< sm) portaled to document.body */}
+                  {mounted && typeof document !== "undefined" && createPortal(
+                    <div
+                      className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-end justify-center sm:hidden animate-fadeIn"
+                      onClick={() => setIsDropdownOpen(false)}
+                      role="dialog"
+                      aria-modal="true"
+                      aria-label="Select Nearby Juz"
+                    >
+                      <div
+                        className="w-full bg-surface-card border-t border-surface-border rounded-t-3xl p-4 pb-8 max-h-[85vh] overflow-y-auto shadow-2xl animate-slideUp text-left"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {/* Pull handle indicator */}
+                        <div className="w-10 h-1 rounded-full bg-surface-border mx-auto mb-3" />
+
+                        {/* Header */}
+                        <div className="flex items-center justify-between pb-3 mb-2 border-b border-surface-border">
+                          <div className="flex items-center gap-2">
+                            <Volume2 className="w-4 h-4 text-brand-primary" />
+                            <span className="font-bold text-sm text-content-primary">
+                              Select Nearby Juz
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => setIsDropdownOpen(false)}
+                            className="p-1 rounded-lg hover:bg-surface-hover text-content-muted hover:text-content-primary transition cursor-pointer"
+                            aria-label="Close"
+                          >
+                            <X className="w-5 h-5" />
+                          </button>
+                        </div>
+
+                        {/* List of 5 Nearby Juzes */}
+                        <div className="space-y-1.5">
+                          {nearbyJuzList.map((item) => {
+                            const isCurrent = item.id === currentJuzId;
+                            const displayName = item.customName || item.defaultName;
+                            const displayRange = item.customRange || item.defaultRange;
+
+                            return (
+                              <button
+                                key={`mobile-${item.id}`}
+                                onClick={() => {
+                                  selectJuz(item.id);
+                                  setIsDropdownOpen(false);
+                                }}
+                                className={`w-full text-left px-3.5 py-2.5 rounded-xl flex flex-col gap-0.5 transition cursor-pointer ${
                                   isCurrent
                                     ? "bg-white/20 text-white shadow-xs"
                                     : "bg-surface-subtle text-content-muted border border-surface-border"
+                                    ? "bg-brand-primary text-white font-semibold shadow-md"
+                                    : "hover:bg-surface-subtle active:bg-surface-subtle/80 text-content-secondary hover:text-content-primary border border-surface-border/60"
                                 }`}
                               >
                                 {item.id}
@@ -286,6 +412,44 @@ export const JuzDisplay: React.FC = () => {
                     })}
                   </div>
                 </div>
+                                <div className="flex items-center justify-between w-full">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span
+                                      className={`w-6 h-6 rounded-md flex items-center justify-center font-bold text-xs shrink-0 ${
+                                        isCurrent
+                                          ? "bg-white/20 text-white shadow-xs"
+                                          : "bg-surface-subtle text-content-muted border border-surface-border"
+                                      }`}
+                                    >
+                                      {item.id}
+                                    </span>
+                                    <span className="font-bold text-sm truncate">
+                                      {displayName}
+                                    </span>
+                                  </div>
+                                  {isCurrent && (
+                                    <span className="text-[10px] bg-white/25 text-white font-bold px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0">
+                                      Playing
+                                    </span>
+                                  )}
+                                </div>
+                                <div
+                                  className={`text-xs truncate w-full pl-8 ${
+                                    isCurrent ? "text-white/85 font-medium" : "text-content-muted font-normal"
+                                  }`}
+                                  title={displayRange}
+                                >
+                                  {displayRange}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>,
+                    document.body
+                  )}
+                </>
               );
             })()}
           </div>
