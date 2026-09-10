@@ -28,6 +28,7 @@ export const JuzDisplay: React.FC = () => {
   const [isTimerModalOpen, setIsTimerModalOpen] = useState(false);
   const [currentDateTime, setCurrentDateTime] = useState<Date | null>(null);
   const selectedJuzRef = useRef<HTMLButtonElement | null>(null);
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setCurrentDateTime(new Date());
@@ -36,6 +37,18 @@ export const JuzDisplay: React.FC = () => {
     }, 1000);
     return () => clearInterval(interval);
   }, []);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    if (!isDropdownOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isDropdownOpen]);
 
   // Focus the list around the current selected Juz number when dropdown opens
   useEffect(() => {
@@ -198,13 +211,13 @@ export const JuzDisplay: React.FC = () => {
       <div className="w-full h-px bg-gradient-to-r from-transparent via-surface-border to-transparent my-3 sm:my-4" />
 
       {/* 1.0 & 1.1 JUZ TITLE & SURAH RANGE */}
-      <div className="flex flex-col items-center text-center space-y-1.5 relative px-2">
+      <div className="flex flex-col items-center text-center space-y-1.5 relative px-2 z-30">
         {/* Juz Selector Dropdown */}
-        <div className="flex items-center gap-2 relative max-w-full">
+        <div ref={dropdownRef} className="flex items-center gap-2 relative max-w-full">
           <div className="relative inline-block max-w-full">
             <button
               onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-              className="flex items-center gap-2 px-3.5 py-1.5 rounded-2xl bg-surface-subtle hover:bg-surface-hover border border-surface-border text-content-primary font-bold text-base sm:text-lg shadow-md transition group max-w-full"
+              className="flex items-center gap-2 px-3.5 py-1.5 rounded-2xl bg-surface-subtle hover:bg-surface-hover border border-surface-border text-content-primary font-bold text-base sm:text-lg shadow-md transition group max-w-full cursor-pointer"
             >
               <Volume2 className="w-5 h-5 text-brand-primary group-hover:scale-110 transition shrink-0" />
               <span className="truncate">{juzName}</span>
@@ -226,11 +239,14 @@ export const JuzDisplay: React.FC = () => {
               const nearbyJuzList = juzList.slice(startIdx, endIdx);
 
               return (
-                <div className="absolute left-1/2 -translate-x-1/2 mt-2 w-[90vw] max-w-sm sm:w-80 bg-surface-card border border-surface-border rounded-2xl shadow-2xl p-2 z-50 divide-y divide-surface-border animate-fadeIn">
-                  <div className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-content-muted">
-                    Select Juz
+                <div className="absolute left-1/2 -translate-x-1/2 mt-2 w-[92vw] max-w-sm sm:w-96 bg-surface-card border border-surface-border rounded-2xl shadow-2xl p-2 z-50 divide-y divide-surface-border animate-fadeIn overflow-hidden">
+                  <div className="px-3.5 py-2 text-xs font-bold uppercase tracking-wider text-content-muted flex items-center justify-between">
+                    <span>Select Juz</span>
+                    <span className="text-[10px] font-medium font-mono text-content-muted/80">
+                      Nearby
+                    </span>
                   </div>
-                  <div className="py-1">
+                  <div className="py-1 space-y-1">
                     {nearbyJuzList.map((item) => {
                       const isCurrent = item.id === currentJuzId;
                       const displayName = item.customName || item.defaultName;
@@ -244,31 +260,41 @@ export const JuzDisplay: React.FC = () => {
                             selectJuz(item.id);
                             setIsDropdownOpen(false);
                           }}
-                          className={`w-full text-left px-3 py-2.5 rounded-xl flex items-center justify-between text-xs sm:text-sm transition ${
+                          className={`w-full text-left px-3 py-2 rounded-xl flex flex-col gap-0.5 transition cursor-pointer ${
                             isCurrent
-                              ? "bg-brand-primary text-white font-semibold shadow-sm"
+                              ? "bg-brand-primary text-white font-semibold shadow-md"
                               : "hover:bg-surface-subtle text-content-secondary hover:text-content-primary"
                           }`}
                         >
-                          <div className="flex items-center gap-2.5">
-                            <span
-                              className={`w-6 h-6 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 ${
-                                isCurrent
-                                  ? "bg-white/20 text-white"
-                                  : "bg-surface-subtle text-content-muted"
-                              }`}
-                            >
-                              {item.id}
-                            </span>
-                            <span className="font-medium truncate">{displayName}</span>
+                          <div className="flex items-center justify-between w-full">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span
+                                className={`w-5 h-5 rounded-md flex items-center justify-center font-bold text-xs shrink-0 ${
+                                  isCurrent
+                                    ? "bg-white/20 text-white shadow-xs"
+                                    : "bg-surface-subtle text-content-muted border border-surface-border"
+                                }`}
+                              >
+                                {item.id}
+                              </span>
+                              <span className="font-bold text-sm truncate">
+                                {displayName}
+                              </span>
+                            </div>
+                            {isCurrent && (
+                              <span className="text-[10px] bg-white/25 text-white font-bold px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0">
+                                Playing
+                              </span>
+                            )}
                           </div>
-                          <span
-                            className={`text-xs font-mono shrink-0 ${
-                              isCurrent ? "text-white/80" : "text-content-muted"
+                          <div
+                            className={`text-xs truncate w-full pl-7 ${
+                              isCurrent ? "text-white/85 font-medium" : "text-content-muted font-normal"
                             }`}
+                            title={displayRange}
                           >
                             {displayRange}
-                          </span>
+                          </div>
                         </button>
                       );
                     })}
