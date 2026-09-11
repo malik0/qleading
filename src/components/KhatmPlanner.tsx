@@ -661,8 +661,8 @@ export const KhatmPlanner: React.FC = () => {
           )}
 
           {/* DUAL-TRACK PROGRESS BARS WITH DAILY SEGMENTS & DOTTED FINISH LINE */}
-          <div className="p-3.5 sm:p-5 rounded-2xl bg-surface-subtle/80 border border-surface-border space-y-4 sm:space-y-5">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3">
+          <div className="p-3.5 sm:p-5 rounded-2xl bg-surface-subtle/80 border border-surface-border space-y-3.5 sm:space-y-4">
+            <div className="flex items-center justify-between gap-2.5 sm:gap-3">
               <div className="min-w-0">
                 <h3 className="text-xs sm:text-sm font-bold text-content-primary flex items-center gap-1.5">
                   <Flag className="w-4 h-4 text-brand-primary shrink-0" />
@@ -670,37 +670,26 @@ export const KhatmPlanner: React.FC = () => {
                 </h3>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 text-[11px] font-medium">
-                <div className="flex items-center gap-1.5">
-                  <span className="w-3 h-3 rounded-md bg-emerald-500 inline-block shadow-sm shrink-0" />
-                  <span className="text-content-secondary">Completed Listenings</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="w-3 h-3 rounded-md bg-sky-500 inline-block shadow-sm shrink-0" />
-                  <span className="text-content-secondary">Scheduled Pace (Today)</span>
-                </div>
-              </div>
+              {/* Scroll track to Today (available on both desktop and mobile) */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (todayTrackColRef.current) {
+                    todayTrackColRef.current.scrollIntoView({
+                      behavior: "smooth",
+                      inline: "center",
+                      block: "nearest",
+                    });
+                    todayTrackColRef.current.focus();
+                  }
+                }}
+                className="text-[11px] font-semibold text-brand-primary bg-brand-light hover:bg-brand-light/70 border border-brand-primary/25 rounded-lg px-2.5 py-1 active:scale-95 flex items-center gap-1.5 cursor-pointer transition select-none shadow-xs focus:outline-none shrink-0"
+                title="Scroll and focus current date in track"
+              >
+                <span>Scroll track to Today</span>
+                <span>→</span>
+              </button>
             </div>
-
-            {/* Mobile swipe hint / Click to scroll track to today */}
-            <button
-              type="button"
-              onClick={() => {
-                if (todayTrackColRef.current) {
-                  todayTrackColRef.current.scrollIntoView({
-                    behavior: "smooth",
-                    inline: "center",
-                    block: "nearest",
-                  });
-                  todayTrackColRef.current.focus();
-                }
-              }}
-              className="text-[11px] font-semibold text-brand-primary bg-brand-light hover:bg-brand-light/70 border border-brand-primary/25 rounded-lg px-2.5 py-1 active:scale-95 flex items-center justify-end gap-1.5 sm:hidden cursor-pointer transition select-none ml-auto shadow-xs focus:outline-none"
-              title="Scroll and focus current date in track"
-            >
-              <span>Scroll track to Today</span>
-              <span>→</span>
-            </button>
 
             {/* The Track Container */}
             <div className="relative overflow-x-auto pb-2 scrollbar-thin">
