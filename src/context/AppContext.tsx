@@ -408,6 +408,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
   // the browser from aborting ongoing playback or resetting the media pipeline.
   useEffect(() => {
     if (!audioRef.current || !activeAudioUrl) return;
+    if (isTransitioningRef.current) return;
     if (!isSameAudioUrl(audioRef.current.src, activeAudioUrl)) {
       const wasPlaying = isPlayingRef.current;
       audioRef.current.src = activeAudioUrl;
@@ -416,6 +417,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
       audioRef.current.defaultPlaybackRate = spd;
       if (wasPlaying) {
         audioRef.current.play().catch((err) => {
+          if (err.name === "AbortError") return;
           console.warn("Audio sync playback failed:", err);
           setIsPlaying(false);
           isPlayingRef.current = false;
@@ -883,7 +885,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
             const targetPos = reconciled.playbackPositionSeconds || 0;
             const targetJuzId = reconciled.currentJuzId || 1;
 
-            if (targetJuzId !== currentState.currentJuzId) {
+            if (!isTransitioningRef.current && targetJuzId !== currentState.currentJuzId) {
               const targetJuz = INITIAL_JUZ_LIST.find((j) => j.id === targetJuzId) || INITIAL_JUZ_LIST[0];
               const targetUrl = getAudioUrlForJuz(targetJuz);
               if (audioRef.current && !isSameAudioUrl(audioRef.current.src, targetUrl)) {
@@ -1435,13 +1437,17 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
       const activePlaybackSpeed = playbackSpeedRef.current || playbackSpeed || 1.0;
       const nextTimerSec = Math.round(targetDuration / activePlaybackSpeed);
 
-      updateStateAndPersist((s) => ({
-        ...s,
+      const updatedState: UserState = {
+        ...userStateRef.current,
         currentJuzId: juzId,
         playbackPositionSeconds: 0,
         timerSeconds: nextTimerSec,
         isPlaying: true,
-      }));
+        updatedAt: new Date().toISOString(),
+      };
+      userStateRef.current = updatedState;
+      setUserState(updatedState);
+      saveStoredState(updatedState);
 
       // Directly update the track on the audio element
       if (audioRef.current) {
@@ -1449,6 +1455,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
           preloadAudioRef.current.removeAttribute("src");
           preloadAudioRef.current.load();
         }
+        audioRef.current.pause();
         audioRef.current.src = targetUrl;
         audioRef.current.currentTime = 0;
         audioRef.current.playbackRate = activePlaybackSpeed;
@@ -1463,6 +1470,10 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
               broadcastPlayback("PLAY", { juzId, position: 0 });
             })
             .catch((err) => {
+              if (err.name === "AbortError") {
+                // Benign abort caused by rapid track switch or newer media load
+                return;
+              }
               console.warn("Track switch play error:", err);
               setIsPlaying(false);
               isPlayingRef.current = false;
@@ -1477,9 +1488,9 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
       setTimeout(() => {
         isTransitioningRef.current = false;
       }, 2000);
-      syncWithServer();
+      syncWithServer(updatedState, { isPlaying: true, isStartingPlayback: true, action: "switch_juz" });
     },
-    [recordAccident, getAudioUrlForJuz, playbackSpeed, updateStateAndPersist, broadcastPlayback, syncWithServer]
+    [recordAccident, getAudioUrlForJuz, playbackSpeed, broadcastPlayback, syncWithServer]
   );
 
   // Dropdown Juz Selection: Directly switch to the selected Juz
@@ -1844,6 +1855,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
         preloadAudioRef.current.load();
       }
 
+      audioRef.current.pause();
       audioRef.current.src = nextUrl;
       audioRef.current.currentTime = 0;
       const activeSpd = playbackSpeedRef.current || playbackSpeed || 1.0;
@@ -1859,6 +1871,9 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
             broadcastPlayback("PLAY", { juzId: nextJuzId, position: 0 });
           })
           .catch((err) => {
+            if (err.name === "AbortError") {
+              return;
+            }
             console.warn("Auto-play next track error:", err);
             setIsPlaying(false);
             isPlayingRef.current = false;
