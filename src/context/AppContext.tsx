@@ -88,6 +88,8 @@ interface AppContextType {
   setTimerSeconds: (seconds: number) => void;
   adjustTimerDefault: (minutes: number, resetCurrent?: boolean) => void;
   setTimerMode: (mode: TimerMode, resetCurrent?: boolean) => void;
+  matchAudio: () => { timeLeft: number; speed: number; rawTimeLeft: number };
+  isTimerMatchedToAudio: boolean;
 
   // Settings
   // Settings & Appearance
@@ -168,8 +170,12 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackPosition, setPlaybackPosition] = useState(0);
-  const [duration, setDuration] = useState(3300);
+  const initialDuration =
+    INITIAL_JUZ_LIST.find((j) => j.id === (INITIAL_USER_STATE.currentJuzId || 1))
+      ?.approxDurationSeconds || 2776;
+  const [duration, setDuration] = useState(initialDuration);
   const [playbackSpeed, setPlaybackSpeedState] = useState<PlaybackSpeed>(1.0);
+  const [isTimerMatchedToAudio, setIsTimerMatchedToAudio] = useState(false);
   const [pendingJuzSwitch, setPendingJuzSwitch] = useState<number | null>(null);
   const [failedLocalJuzs, setFailedLocalJuzs] = useState<Record<number, boolean>>({});
 
@@ -194,6 +200,10 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
   const isTransitioningRef = useRef(false);
   const userStateRef = useRef(userState);
   const settingsRef = useRef(settings);
+  const isTimerMatchedToAudioRef = useRef(false);
+  const durationRef = useRef(initialDuration);
+  const playbackSpeedRef = useRef<PlaybackSpeed>(1.0);
+  const currentJuzRef = useRef(INITIAL_JUZ_LIST[0]);
 
   // Sync refs with state
   useEffect(() => {
@@ -212,6 +222,14 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
   useEffect(() => {
     isPlayingRef.current = isPlaying;
   }, [isPlaying]);
+
+  useEffect(() => {
+    durationRef.current = duration;
+  }, [duration]);
+
+  useEffect(() => {
+    playbackSpeedRef.current = playbackSpeed;
+  }, [playbackSpeed]);
 
   // Load from local storage on mount
   // Load from local storage on mount & check Cloudflare D1 session
@@ -354,6 +372,10 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
 
   const currentJuz =
     juzList.find((j) => j.id === userState.currentJuzId) || juzList[0];
+
+  useEffect(() => {
+    currentJuzRef.current = currentJuz;
+  }, [currentJuz]);
 
   const juzName = currentJuz.customName || currentJuz.defaultName;
   const juzRange = currentJuz.customRange || currentJuz.defaultRange;
@@ -1223,6 +1245,10 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
     }
 
     try {
+      if (playbackSpeedRef.current && audioRef.current) {
+        audioRef.current.playbackRate = playbackSpeedRef.current;
+        audioRef.current.defaultPlaybackRate = playbackSpeedRef.current;
+      }
       await audioRef.current.play();
       setIsPlaying(true);
       isPlayingRef.current = true;
@@ -1305,12 +1331,44 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
     seekTo(0);
   }, [seekTo, recordAccident]);
 
-  const setSpeed = useCallback((speed: PlaybackSpeed) => {
-    setPlaybackSpeedState(speed);
-    if (audioRef.current) {
-      audioRef.current.playbackRate = speed;
-    }
-  }, []);
+  const setSpeed = useCallback(
+    (speed: PlaybackSpeed) => {
+      setPlaybackSpeedState(speed);
+      playbackSpeedRef.current = speed;
+      if (audioRef.current) {
+        audioRef.current.playbackRate = speed;
+        audioRef.current.defaultPlaybackRate = speed;
+      }
+      updateSettings({ defaultPlaybackSpeed: speed });
+
+      // Dynamically readjust Big Timer if it was matched to audio
+      if (isTimerMatchedToAudioRef.current) {
+        const curDur =
+          audioRef.current &&
+          !isNaN(audioRef.current.duration) &&
+          isFinite(audioRef.current.duration) &&
+          audioRef.current.duration > 0
+            ? audioRef.current.duration
+            : durationRef.current > 0
+            ? durationRef.current
+            : currentJuzRef.current.approxDurationSeconds || 2776;
+        const curPos =
+          audioRef.current &&
+          !isNaN(audioRef.current.currentTime) &&
+          isFinite(audioRef.current.currentTime)
+            ? audioRef.current.currentTime
+            : playbackPosRef.current || 0;
+        const rawTimeLeft = Math.max(0, Math.round(curDur - curPos));
+        const adjustedTimeLeft = Math.round(rawTimeLeft / speed);
+        timerSecondsRef.current = adjustedTimeLeft;
+        updateStateAndPersist((prev) => ({
+          ...prev,
+          timerSeconds: adjustedTimeLeft,
+        }));
+      }
+    },
+    [updateSettings, updateStateAndPersist]
+  );
 
   // Dropdown Juz Selection with Confirmation Prompt
   const selectJuz = useCallback(
@@ -1335,6 +1393,9 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
 
       const targetJuz = INITIAL_JUZ_LIST.find((j) => j.id === juzId) || INITIAL_JUZ_LIST[0];
       const targetUrl = getAudioUrlForJuz(targetJuz);
+      const targetDuration = targetJuz.approxDurationSeconds || 2776;
+      setDuration(targetDuration);
+      durationRef.current = targetDuration;
 
       updateStateAndPersist((s) => ({
         ...s,
@@ -1350,6 +1411,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
         audioRef.current.currentTime = 0;
         if (playbackSpeed) {
           audioRef.current.playbackRate = playbackSpeed;
+          audioRef.current.defaultPlaybackRate = playbackSpeed;
         }
         audioRef.current.load();
         const playPromise = audioRef.current.play();
@@ -1375,6 +1437,8 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
   }, []);
 
   const resetTimer = useCallback(() => {
+    setIsTimerMatchedToAudio(false);
+    isTimerMatchedToAudioRef.current = false;
     recordAccident("timer_reset", "Reset Big Timer");
     const targetSec = settings.timerTargetMinutes * 60;
     timerSecondsRef.current = targetSec;
@@ -1386,6 +1450,8 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
 
   const setTimerSeconds = useCallback(
     (seconds: number) => {
+      setIsTimerMatchedToAudio(false);
+      isTimerMatchedToAudioRef.current = false;
       const validSec = Math.max(-86400, Math.min(86400, Math.round(seconds)));
       recordAccident("timer_reset", `Manually set Big Timer to ${formatHeroTimer(validSec)}`);
       timerSecondsRef.current = validSec;
@@ -1402,6 +1468,8 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
       const validMinutes = Math.max(1, Math.min(720, Math.round(targetMinutes)));
       updateSettings({ timerTargetMinutes: validMinutes });
       if (resetCurrent) {
+        setIsTimerMatchedToAudio(false);
+        isTimerMatchedToAudioRef.current = false;
         const targetSec = validMinutes * 60;
         timerSecondsRef.current = targetSec;
         updateStateAndPersist((prev) => ({
@@ -1417,6 +1485,8 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
     (_mode: TimerMode, resetCurrent: boolean = false) => {
       updateSettings({ timerMode: "countdown" });
       if (resetCurrent) {
+        setIsTimerMatchedToAudio(false);
+        isTimerMatchedToAudioRef.current = false;
         const targetSec = settings.timerTargetMinutes * 60;
         timerSecondsRef.current = targetSec;
         updateStateAndPersist((prev) => ({
@@ -1427,6 +1497,46 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
     },
     [settings.timerTargetMinutes, updateSettings, updateStateAndPersist]
   );
+
+  const matchAudio = useCallback(() => {
+    const spd =
+      playbackSpeedRef.current ||
+      (audioRef.current ? audioRef.current.playbackRate : 1.0) ||
+      settingsRef.current.defaultPlaybackSpeed ||
+      1.0;
+    const curDur =
+      audioRef.current &&
+      !isNaN(audioRef.current.duration) &&
+      isFinite(audioRef.current.duration) &&
+      audioRef.current.duration > 0
+        ? audioRef.current.duration
+        : durationRef.current > 0
+        ? durationRef.current
+        : currentJuzRef.current.approxDurationSeconds || 2776;
+    const curPos =
+      audioRef.current &&
+      !isNaN(audioRef.current.currentTime) &&
+      isFinite(audioRef.current.currentTime)
+        ? audioRef.current.currentTime
+        : playbackPosRef.current || 0;
+
+    const rawTimeLeft = Math.max(0, Math.round(curDur - curPos));
+    const adjustedTimeLeft = Math.round(rawTimeLeft / spd);
+
+    recordAccident(
+      "timer_reset",
+      `Matched Big Timer to Audio: ${formatHeroTimer(adjustedTimeLeft)}${spd !== 1.0 ? ` (${spd}x speed)` : ""}`
+    );
+    timerSecondsRef.current = adjustedTimeLeft;
+    setIsTimerMatchedToAudio(true);
+    isTimerMatchedToAudioRef.current = true;
+    updateStateAndPersist((prev) => ({
+      ...prev,
+      timerSeconds: adjustedTimeLeft,
+    }));
+
+    return { timeLeft: adjustedTimeLeft, speed: spd, rawTimeLeft };
+  }, [recordAccident, updateStateAndPersist]);
 
   const setStreakTargetMinutes = useCallback(
     (minutes: number) => {
@@ -1814,6 +1924,11 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
 
   const toggleDayStreakManually = useCallback(
     (dateStr: string) => {
+      const todayStr = getLocalDateString();
+      if (dateStr > todayStr) {
+        // You cannot complete it prior to that day
+        return;
+      }
       updateStateAndPersist((s) => {
         const history = { ...s.historyRecords };
         const existing = history[dateStr] || {
@@ -1824,7 +1939,8 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
           juzCompletedCount: 0,
           completedJuzIds: [],
         };
-        const nextCompleted = !existing.targetReached;
+        const wasCompleted = (existing.juzCompletedCount || 0) >= 1;
+        const nextCompleted = !wasCompleted;
         history[dateStr] = {
           ...existing,
           targetReached: nextCompleted,
@@ -2178,6 +2294,8 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
         setTimerSeconds,
         adjustTimerDefault,
         setTimerMode,
+        matchAudio,
+        isTimerMatchedToAudio,
         settings,
         updateSettings,
         themeMode: settings.themeMode,
@@ -2242,10 +2360,14 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
           const d = e.currentTarget.duration;
           if (d && !isNaN(d) && isFinite(d)) {
             setDuration(d);
+            durationRef.current = d;
           }
           if (playbackSpeed) {
             e.currentTarget.playbackRate = playbackSpeed;
           }
+          const activeSpd = playbackSpeedRef.current || playbackSpeed || 1.0;
+          e.currentTarget.playbackRate = activeSpd;
+          e.currentTarget.defaultPlaybackRate = activeSpd;
           // Restore position if restoring progress (> 0)
           const targetPos = playbackPosRef.current;
           if (targetPos > 0 && Math.abs(e.currentTarget.currentTime - targetPos) > 1) {

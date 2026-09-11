@@ -36,6 +36,7 @@ export const TimerModal: React.FC<TimerModalProps> = ({ isOpen, onClose }) => {
     playbackPosition,
     playbackSpeed,
     juzName,
+    matchAudio,
   } = useApp();
 
   const [manualMinutes, setManualMinutes] = useState<number>(() =>
@@ -53,7 +54,7 @@ export const TimerModal: React.FC<TimerModalProps> = ({ isOpen, onClose }) => {
     setMounted(true);
   }, []);
 
-  // Sync state when modal opens
+  // Sync state when modal opens (do not re-run every second while timer ticks)
   useEffect(() => {
     if (isOpen) {
       const sec = Math.max(0, timerSeconds);
@@ -63,7 +64,7 @@ export const TimerModal: React.FC<TimerModalProps> = ({ isOpen, onClose }) => {
       setApplyToCurrent(false);
       setSuccessMessage(null);
     }
-  }, [isOpen, timerSeconds, timerTargetMinutes]);
+  }, [isOpen]);
 
   // Handle ESC key to close
   useEffect(() => {
@@ -90,12 +91,7 @@ export const TimerModal: React.FC<TimerModalProps> = ({ isOpen, onClose }) => {
 
   // Match Audio Handler: Sets the timer to adjusted time left in audio
   const handleMatchAudio = () => {
-    const spd = playbackSpeed || 1.0;
-    const rawTimeLeft = Math.max(
-      0,
-      Math.round((duration || 0) - (playbackPosition || 0))
-    );
-    const timeLeft = Math.round(rawTimeLeft / spd);
+    const { timeLeft, speed: activeSpeed } = matchAudio();
     const mins = Math.floor(timeLeft / 60);
     const secs = timeLeft % 60;
     setManualMinutes(mins);
@@ -103,7 +99,7 @@ export const TimerModal: React.FC<TimerModalProps> = ({ isOpen, onClose }) => {
     setApplyToCurrent(false);
     setTimerSeconds(timeLeft);
     setSuccessMessage(
-      `Matched audio: ${formatHeroTimer(timeLeft)} left in ${juzName}${spd !== 1.0 ? ` (${spd}x speed)` : ""}`
+      `Matched audio: ${formatHeroTimer(timeLeft)} left in ${juzName}${activeSpeed !== 1.0 ? ` (${activeSpeed}x speed)` : ""}`
     );
     setTimeout(() => {
       setSuccessMessage(null);
@@ -295,7 +291,7 @@ export const TimerModal: React.FC<TimerModalProps> = ({ isOpen, onClose }) => {
             <button
               type="button"
               onClick={handleMatchAudio}
-              title={`Match remaining audio time (${audioTimeFormatted} remaining in ${juzName})`}
+              title={`Match remaining audio time (${audioTimeFormatted} remaining in ${juzName}${speed !== 1.0 ? ` at ${speed}x speed` : ""})`}
               className="w-full flex items-center justify-between p-3 rounded-xl bg-brand-light/50 hover:bg-brand-light border border-brand-primary/30 hover:border-brand-primary/60 text-brand-primary transition shadow-sm group active:scale-[0.99] cursor-pointer mt-1"
             >
               <div className="flex items-center gap-2.5">
@@ -307,7 +303,8 @@ export const TimerModal: React.FC<TimerModalProps> = ({ isOpen, onClose }) => {
                     Match Audio
                   </span>
                   <span className="text-[11px] text-content-muted block">
-                    Match time left in audio ({audioTimeFormatted} remaining in {juzName})
+                    Match time left in audio ({audioTimeFormatted} remaining in {juzName}
+                    {speed !== 1.0 ? ` at ${speed}x speed` : ""})
                   </span>
                 </div>
               </div>
@@ -448,7 +445,6 @@ export const TimerModal: React.FC<TimerModalProps> = ({ isOpen, onClose }) => {
                   Reset active timer to this default value
                 </span>
                 <span>
-                  Applies the default duration (${targetMinutes}m) to the active timer now
                   Applies the default duration ({targetMinutes}m) to the active timer now
                 </span>
               </div>

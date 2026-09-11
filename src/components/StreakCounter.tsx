@@ -100,13 +100,10 @@ export const StreakCounter: React.FC = () => {
         ? todayRecord.completedJuzIds || []
         : record?.completedJuzIds || [];
 
-      const completed = Boolean(
-        record?.targetReached ||
-        (isToday && todayRecord.targetReached) ||
-        juzCompletedCount > 0
-      );
-      const secondsRead = isToday ? todayRecord.secondsRead : record?.secondsRead || 0;
-      const progress = completed ? 1 : Math.min(1, Math.max(0, secondsRead / targetSeconds));
+      // Requirement: A day is marked complete/colored only if a single Juz has been listened to on that day. You cannot complete it prior to that day.
+      const completed = !isFuture && Boolean(juzCompletedCount >= 1 || completedJuzIds.length >= 1);
+      const secondsRead = isFuture ? 0 : isToday ? todayRecord.secondsRead : record?.secondsRead || 0;
+      const progress = completed ? 1 : isFuture ? 0 : Math.min(1, Math.max(0, secondsRead / targetSeconds));
 
       days.push({
         date: d,
@@ -143,23 +140,16 @@ export const StreakCounter: React.FC = () => {
       d.setDate(todayDate.getDate() - i);
       const dateStr = getLocalDateString(d);
       const rec = historyRecords[dateStr];
-      if (
-        rec &&
-        (rec.targetReached ||
-          (rec.juzCompletedCount !== undefined && rec.juzCompletedCount > 0) ||
-          (rec.completedJuzIds && rec.completedJuzIds.length > 0) ||
-          (rec.secondsRead !== undefined && rec.secondsRead > 0))
-      ) {
+      const count = rec?.juzCompletedCount || (rec?.completedJuzIds ? rec.completedJuzIds.length : 0);
+      if (rec && count >= 1) {
         completedCount++;
       }
     }
-    // Also include today if completed or listened to
-    if (
-      todayRecord.targetReached ||
-      (todayRecord.juzCompletedCount !== undefined && todayRecord.juzCompletedCount > 0) ||
-      (todayRecord.completedJuzIds && todayRecord.completedJuzIds.length > 0) ||
-      (todayRecord.secondsRead !== undefined && todayRecord.secondsRead > 0)
-    ) {
+    // Also include today if a single Juz has been listened to
+    const todayCount =
+      todayRecord.juzCompletedCount ||
+      (todayRecord.completedJuzIds ? todayRecord.completedJuzIds.length : 0);
+    if (todayCount >= 1) {
       completedCount++;
     }
     const percent = Math.round((completedCount / 30) * 100);
@@ -169,10 +159,8 @@ export const StreakCounter: React.FC = () => {
     };
   }, [
     historyRecords,
-    todayRecord.targetReached,
     todayRecord.juzCompletedCount,
     todayRecord.completedJuzIds,
-    todayRecord.secondsRead,
   ]);
 
   // 4.3 MONTHLY CALENDAR VIEW DAYS
@@ -210,11 +198,9 @@ export const StreakCounter: React.FC = () => {
         : record?.completedJuzIds || [];
       const secondsRead = isToday ? todayRecord.secondsRead : record?.secondsRead || 0;
 
-      const completed = Boolean(
-        record?.targetReached ||
-        (isToday && todayRecord.targetReached) ||
-        juzCompletedCount > 0
-      );
+      // Completed only if a single Juz has been listened to on that day; cannot be completed prior to that day
+      const completed = !isFuture && Boolean(juzCompletedCount >= 1 || completedJuzIds.length >= 1);
+      const safeSecondsRead = isFuture ? 0 : secondsRead;
 
       daysArray.push({
         date: d,
@@ -224,7 +210,7 @@ export const StreakCounter: React.FC = () => {
         isToday,
         isFuture,
         completed,
-        secondsRead,
+        secondsRead: safeSecondsRead,
         juzCompletedCount,
         completedJuzIds,
       });
@@ -257,12 +243,9 @@ export const StreakCounter: React.FC = () => {
     const completedJuzIds = isToday
       ? todayRecord.completedJuzIds || []
       : rec?.completedJuzIds || [];
-    const secondsRead = isToday ? todayRecord.secondsRead : rec?.secondsRead || 0;
-    const completed = Boolean(
-      rec?.targetReached ||
-      (isToday && todayRecord.targetReached) ||
-      juzCompletedCount > 0
-    );
+    const isFuture = selectedDayStats.dateStr > todayStr;
+    const secondsRead = isFuture ? 0 : isToday ? todayRecord.secondsRead : rec?.secondsRead || 0;
+    const completed = !isFuture && Boolean(juzCompletedCount >= 1 || completedJuzIds.length >= 1);
 
     return {
       date: selectedDayStats.date,
@@ -330,19 +313,16 @@ export const StreakCounter: React.FC = () => {
             const CIRCUMFERENCE = 2 * Math.PI * CIRCLE_RADIUS;
             const strokeDashoffset = CIRCUMFERENCE * (1 - item.progress);
 
-            // Daily Streak day circle background needs to be solid light blue once a single Juz is listened to or completed
-            const isListenedOrCompleted = Boolean(
-              item.completed ||
-              (item.juzCompletedCount !== undefined && item.juzCompletedCount > 0) ||
-              (item.completedJuzIds && item.completedJuzIds.length > 0) ||
-              (item.secondsRead !== undefined && item.secondsRead > 0)
-            );
+            // Daily Streak day circle background is solid light blue ONLY if a single Juz has been listened to on that day (item.completed)
+            const isCompleted = item.completed;
 
             const tooltip = `${item.dateStr}: ${
               item.completed
-                ? "Daily goal reached"
-                : `${Math.round(item.progress * 100)}% completed`
-            } (${Math.round(item.secondsRead / 60)}/${streakTargetMinutes}m) • Click for stats`;
+                ? `Completed (${item.juzCompletedCount} Juz)`
+                : item.isFuture
+                ? "Upcoming"
+                : `${Math.round(item.progress * 100)}% progress (${Math.round(item.secondsRead / 60)}/${streakTargetMinutes}m)`
+            } • Click for stats`;
 
             return (
               <button
@@ -371,7 +351,7 @@ export const StreakCounter: React.FC = () => {
                 {/* 4.1 Day Circle with Solid Background & Progress Bar Border */}
                 <div
                   className={`relative w-9 h-9 sm:w-11 sm:h-11 rounded-full flex items-center justify-center select-none transition-all duration-300 shrink-0 ${
-                    isListenedOrCompleted
+                    isCompleted
                       ? "bg-sky-400 text-slate-950 font-extrabold shadow-md shadow-sky-400/25"
                       : item.isToday
                       ? "bg-surface-subtle text-brand-primary font-bold shadow-inner"
@@ -388,18 +368,18 @@ export const StreakCounter: React.FC = () => {
                       cx="24"
                       cy="24"
                       r={CIRCLE_RADIUS}
-                      fill={isListenedOrCompleted ? "#38bdf8" : "none"}
+                      fill={isCompleted ? "#38bdf8" : "none"}
                       stroke="currentColor"
                       strokeWidth="3"
                       className={
-                        isListenedOrCompleted
+                        isCompleted
                           ? "text-sky-400"
                           : item.isToday
                           ? "text-brand-primary/40"
                           : "text-surface-border"
                       }
                     />
-                    {item.progress > 0 && !isListenedOrCompleted && (
+                    {item.progress > 0 && !isCompleted && !item.isFuture && (
                       <circle
                         cx="24"
                         cy="24"
@@ -417,7 +397,7 @@ export const StreakCounter: React.FC = () => {
 
                   <span
                     className={`relative z-10 text-xs sm:text-sm font-bold transition-all ${
-                      isListenedOrCompleted
+                      isCompleted
                         ? "text-slate-950 font-extrabold"
                         : item.isToday
                         ? "text-brand-primary font-bold"
@@ -439,7 +419,7 @@ export const StreakCounter: React.FC = () => {
                         <span
                           key={dotIdx}
                           className={`w-1.5 h-1.5 rounded-full ${
-                            isListenedOrCompleted
+                            isCompleted
                               ? "bg-sky-400 ring-1 ring-sky-400/30"
                               : "bg-brand-primary ring-1 ring-brand-primary/30"
                           }`}
@@ -448,7 +428,7 @@ export const StreakCounter: React.FC = () => {
                       {item.juzCompletedCount > 4 && (
                         <span
                           className={`text-[9px] font-bold leading-none ${
-                            isListenedOrCompleted ? "text-sky-400" : "text-brand-primary"
+                            isCompleted ? "text-sky-400" : "text-brand-primary"
                           }`}
                         >
                           +{item.juzCompletedCount - 4}
@@ -528,18 +508,12 @@ export const StreakCounter: React.FC = () => {
                 }
 
                 let colorStyle = "bg-surface-subtle/50 border-surface-border text-content-muted/60";
-                const isListenedOrCompleted = Boolean(
-                  dayItem.completed ||
-                  (dayItem.juzCompletedCount !== undefined && dayItem.juzCompletedCount > 0) ||
-                  (dayItem.completedJuzIds && dayItem.completedJuzIds.length > 0) ||
-                  (dayItem.secondsRead !== undefined && dayItem.secondsRead > 0)
-                );
-                if (isListenedOrCompleted) {
+                if (dayItem.completed) {
                   colorStyle = "bg-sky-400 text-slate-950 font-bold border-transparent shadow-sm";
-                } else if (dayItem.isPast) {
-                  colorStyle = "bg-surface-hover text-content-muted border-surface-border";
                 } else if (dayItem.isToday) {
                   colorStyle = "bg-surface-subtle border-2 border-brand-primary text-brand-primary font-bold";
+                } else if (dayItem.isPast) {
+                  colorStyle = "bg-surface-hover text-content-muted border-surface-border";
                 }
 
                 return (
@@ -565,7 +539,7 @@ export const StreakCounter: React.FC = () => {
                     }}
                     title={`${dayItem.dateStr}: ${
                       dayItem.completed
-                        ? "Target Completed"
+                        ? `Completed (${dayItem.juzCompletedCount} Juz)`
                         : dayItem.isPast
                         ? "Not Completed"
                         : "Upcoming / Today"
@@ -580,7 +554,7 @@ export const StreakCounter: React.FC = () => {
                           <span
                             key={dotIdx}
                             className={`w-1 h-1 rounded-full ${
-                              isListenedOrCompleted ? "bg-slate-950" : "bg-brand-primary"
+                              dayItem.completed ? "bg-slate-950" : "bg-brand-primary"
                             }`}
                           />
                         ))}
@@ -595,7 +569,7 @@ export const StreakCounter: React.FC = () => {
             <div className="pt-2 border-t border-surface-border flex items-center justify-around text-xs text-content-muted">
               <div className="flex items-center gap-1.5">
                 <span className="w-3.5 h-3.5 rounded-full bg-sky-400 inline-block" />
-                <span>Completed / Read</span>
+                <span>Completed (1+ Juz)</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="w-3.5 h-3.5 rounded-full bg-surface-hover border border-surface-border inline-block" />

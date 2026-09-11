@@ -3,6 +3,7 @@
 import React from "react";
 import { useApp } from "../context/AppContext";
 import { PlaybackSpeed } from "../types/quran";
+import { formatAudioTime } from "../lib/utils";
 import {
   Play,
   Pause,
@@ -11,6 +12,7 @@ import {
   SkipForward,
   RefreshCw,
   History,
+  Headphones,
 } from "lucide-react";
 
 const SPEEDS: PlaybackSpeed[] = [0.5, 1.0, 1.25, 1.5, 1.75, 2.0];
@@ -28,7 +30,15 @@ export const PlaybackControls: React.FC = () => {
     setSpeed,
     settings,
     openRollBack,
+    matchAudio,
+    duration,
+    playbackPosition,
+    isTimerMatchedToAudio,
   } = useApp();
+
+  const rawRemaining = Math.max(0, (duration || 0) - (playbackPosition || 0));
+  const adjustedRemaining = Math.round(rawRemaining / (playbackSpeed || 1.0));
+  const audioTimeFormatted = formatAudioTime(adjustedRemaining);
 
   return (
     <div className="w-full bg-surface-card border border-surface-border rounded-2xl sm:rounded-3xl p-4 sm:p-5 backdrop-blur-xl shadow-xl space-y-4 transition-colors duration-200">
@@ -113,24 +123,42 @@ export const PlaybackControls: React.FC = () => {
         </button>
       </div>
 
-      {/* Playback Speed Selector (Requirement 2.3) */}
-      <div className="pt-3 border-t border-surface-border flex flex-wrap items-center justify-center gap-1.5 sm:gap-2">
-        {SPEEDS.map((speed) => {
-          const isSelected = playbackSpeed === speed;
-          return (
-            <button
-              key={speed}
-              onClick={() => setSpeed(speed)}
-              className={`px-2 sm:px-2.5 py-1 rounded-xl text-xs font-semibold font-mono transition shadow-sm ${
-                isSelected
-                  ? "bg-brand-primary text-white shadow-md font-bold"
-                  : "bg-surface-subtle hover:bg-surface-hover text-content-secondary border border-surface-border"
-              }`}
-            >
-              {speed}x
-            </button>
-          );
-        })}
+      {/* Playback Speed Selector & Inline Match Audio */}
+      <div className="pt-3 border-t border-surface-border flex flex-wrap items-center justify-center sm:justify-between gap-2.5">
+        <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2">
+          {SPEEDS.map((speed) => {
+            const isSelected = playbackSpeed === speed;
+            return (
+              <button
+                key={speed}
+                onClick={() => setSpeed(speed)}
+                className={`px-2 sm:px-2.5 py-1 rounded-xl text-xs font-semibold font-mono transition shadow-sm cursor-pointer ${
+                  isSelected
+                    ? "bg-brand-primary text-white shadow-md font-bold"
+                    : "bg-surface-subtle hover:bg-surface-hover text-content-secondary border border-surface-border"
+                }`}
+              >
+                {speed}x
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Inline Match Audio button */}
+        <button
+          type="button"
+          onClick={() => matchAudio()}
+          title={`Match Big Timer to remaining audio (${audioTimeFormatted} at ${playbackSpeed}x speed)`}
+          className={`px-3 py-1 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-sm border cursor-pointer active:scale-95 ${
+            isTimerMatchedToAudio
+              ? "bg-brand-light text-brand-primary border-brand-primary/40 font-bold ring-1 ring-brand-primary/20"
+              : "bg-surface-subtle hover:bg-surface-hover text-content-secondary hover:text-content-primary border-surface-border"
+          }`}
+        >
+          <Headphones className="w-3.5 h-3.5 text-brand-primary shrink-0" />
+          <span>Match Audio</span>
+          <span className="font-mono text-[11px] opacity-80">({audioTimeFormatted})</span>
+        </button>
       </div>
     </div>
   );
