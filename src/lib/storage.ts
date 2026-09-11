@@ -142,11 +142,12 @@ export function saveStoredState(state: UserState): void {
  */
 export function mergeHistoryRecords(
   local: Record<string, DayReadingRecord> = {},
-  remote: Record<string, DayReadingRecord> = {}
+  remote: Record<string, DayReadingRecord> = {},
+  isLocalNewer: boolean = true
 ): Record<string, DayReadingRecord> {
   const mergedHistory: Record<string, DayReadingRecord> = {
-    ...local,
     ...remote,
+    ...local,
   };
 
   for (const date in local) {
@@ -158,17 +159,23 @@ export function mergeHistoryRecords(
         const sNum = Number(slot);
         combinedSlots[sNum] = Math.max(combinedSlots[sNum] || 0, locDay.slots[sNum] || 0);
       }
-      const combinedCompletedJuzIds = Array.from(
-        new Set([
-          ...(locDay.completedJuzIds || []),
-          ...(remDay.completedJuzIds || []),
-        ])
-      );
-      const combinedJuzCompletedCount = Math.max(
-        locDay.juzCompletedCount || 0,
-        remDay.juzCompletedCount || 0,
-        combinedCompletedJuzIds.length
-      );
+      const combinedCompletedJuzIds =
+        isLocalNewer && locDay.completedJuzIds !== undefined
+          ? locDay.completedJuzIds
+          : Array.from(
+              new Set([
+                ...(locDay.completedJuzIds || []),
+                ...(remDay.completedJuzIds || []),
+              ])
+            );
+      const combinedJuzCompletedCount =
+        isLocalNewer && locDay.juzCompletedCount !== undefined
+          ? locDay.juzCompletedCount
+          : Math.max(
+              locDay.juzCompletedCount || 0,
+              remDay.juzCompletedCount || 0,
+              combinedCompletedJuzIds.length
+            );
 
       mergedHistory[date] = {
         date,
@@ -229,8 +236,14 @@ export function reconcileStates(local: UserState, remote: UserState): UserState 
     base = remoteTime > localTime ? remote : local;
   }
 
+  const isLocalNewer = localTime >= remoteTime;
+
   // Merge history records and user logs so data from either device is preserved
-  const mergedHistory = mergeHistoryRecords(local.historyRecords || {}, remote.historyRecords || {});
+  const mergedHistory = mergeHistoryRecords(
+    local.historyRecords || {},
+    remote.historyRecords || {},
+    isLocalNewer
+  );
 
   // Deduplicate user logs by ID
   const logMap = new Map<string, UserLogEntry>();
@@ -240,16 +253,22 @@ export function reconcileStates(local: UserState, remote: UserState): UserState 
     (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
   );
 
-  // Merge completed Juzs (union of distinct IDs 1-30)
-  const mergedCompletedJuzs = Array.from(
-    new Set([...(local.completedJuzs || []), ...(remote.completedJuzs || [])])
-  ).sort((a, b) => a - b);
+  // Merge completed Juzs (union of distinct IDs 1-30 unless local is newer and set)
+  const mergedCompletedJuzs =
+    isLocalNewer && local.completedJuzs !== undefined
+      ? local.completedJuzs
+      : Array.from(
+          new Set([...(local.completedJuzs || []), ...(remote.completedJuzs || [])])
+        ).sort((a, b) => a - b);
 
-  const mergedTally = Math.max(
-    local.juzTally || 0,
-    remote.juzTally || 0,
-    mergedCompletedJuzs.length
-  );
+  const mergedTally =
+    isLocalNewer && local.juzTally !== undefined
+      ? local.juzTally
+      : Math.max(
+          local.juzTally || 0,
+          remote.juzTally || 0,
+          mergedCompletedJuzs.length
+        );
 
   const localKhatm = local.khatmPlan;
   const remoteKhatm = remote.khatmPlan;

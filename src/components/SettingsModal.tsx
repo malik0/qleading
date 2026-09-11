@@ -226,7 +226,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     juzTally,
     setJuzTallyManually,
     setCompletedStreakDaysManually,
+    setTodayJuzCountManually,
+    setTallyAndStreakProgressManually,
     historyRecords,
+    todayRecord,
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<
@@ -240,6 +243,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [customRangeInput, setCustomRangeInput] = useState<string>("");
 
   // Local state for Manual Tally and Streak adjustments
+  // Local state for Manual Tally, Today's Juz count, and Streak adjustments
+  const initialTodayJuzCount =
+    todayRecord.juzCompletedCount !== undefined
+      ? todayRecord.juzCompletedCount
+      : (todayRecord.completedJuzIds ? todayRecord.completedJuzIds.length : 0);
+  const [manualTodayJuzInput, setManualTodayJuzInput] = useState<number>(initialTodayJuzCount);
   const [manualTallyInput, setManualTallyInput] = useState<number>(juzTally || 0);
   const [manualCompletedJuzs, setManualCompletedJuzs] = useState<number[]>(completedJuzs || []);
   const [manualStreakDays, setManualStreakDays] = useState<number>(() => {
@@ -261,6 +270,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   // Sync state when modal opens
   React.useEffect(() => {
     if (isOpen) {
+      const currentToday =
+        todayRecord.juzCompletedCount !== undefined
+          ? todayRecord.juzCompletedCount
+          : (todayRecord.completedJuzIds ? todayRecord.completedJuzIds.length : 0);
+      setManualTodayJuzInput(currentToday);
       setManualTallyInput(juzTally || 0);
       setManualCompletedJuzs(completedJuzs || []);
       let count = 0;
@@ -277,7 +291,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       setManualStreakDays(count);
       setProgressSaveNotice(null);
     }
-  }, [isOpen, juzTally, completedJuzs, historyRecords]);
+  }, [isOpen, juzTally, completedJuzs, historyRecords, todayRecord]);
 
   if (!isOpen) return null;
 
@@ -932,11 +946,67 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   Manual Juz Tally & Streak Adjustments
                 </h4>
                 <p className="text-xs text-content-muted">
-                  Manually adjust completed Juzes, total tally, and past 30-day streak count.
+                  Manually adjust daily Juz listened today, total tally, completed checklist, and past 30-day streak count.
                 </p>
               </div>
 
-              {/* Section 1: Total Juz Tally */}
+              {/* Section 1: Daily Juz Listened Today */}
+              <div className="p-4 rounded-2xl bg-surface-subtle/60 border border-surface-border space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-sm font-bold text-content-primary block">
+                      Daily Juz Listened Today
+                    </span>
+                    <span className="text-xs text-content-muted">
+                      Number of completed Juz recitations tracked for today (reflected as indicator dots)
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 bg-brand-light px-3 py-1 rounded-xl border border-brand-primary/20">
+                    <div className="flex items-center gap-1">
+                      {Array.from({ length: Math.min(manualTodayJuzInput, 10) }).map((_, idx) => (
+                        <span
+                          key={idx}
+                          className="w-2 h-2 rounded-full bg-brand-primary shadow-xs"
+                        />
+                      ))}
+                    </div>
+                    <span className="text-sm font-mono font-bold text-brand-primary">
+                      {manualTodayJuzInput} {manualTodayJuzInput === 1 ? "Juz" : "Juzs"} today
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setManualTodayJuzInput((prev) => Math.max(0, prev - 1))}
+                    title="Decrease today's Juz count by 1"
+                    className="p-2.5 rounded-xl bg-surface-card hover:bg-surface-hover border border-surface-border text-content-secondary hover:text-content-primary transition cursor-pointer"
+                  >
+                    <Minus className="w-4 h-4" />
+                  </button>
+                  <input
+                    type="number"
+                    min={0}
+                    max={99}
+                    value={manualTodayJuzInput}
+                    onChange={(e) =>
+                      setManualTodayJuzInput(Math.max(0, parseInt(e.target.value, 10) || 0))
+                    }
+                    className="flex-1 bg-surface-card border border-surface-border rounded-xl px-3 py-2 text-center text-base font-mono font-bold text-content-primary focus:outline-none focus:border-brand-primary"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setManualTodayJuzInput((prev) => prev + 1)}
+                    title="Increase today's Juz count by 1"
+                    className="p-2.5 rounded-xl bg-surface-card hover:bg-surface-hover border border-surface-border text-content-secondary hover:text-content-primary transition cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Section 2: Total Juz Tally */}
               <div className="p-4 rounded-2xl bg-surface-subtle/60 border border-surface-border space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
@@ -983,6 +1053,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
 
               {/* Section 2: 30 Juz Checklist Completion */}
+              {/* Section 3: 30 Juz Checklist Completion */}
               <div className="p-4 rounded-2xl bg-surface-subtle/60 border border-surface-border space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
@@ -1046,6 +1117,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
 
               {/* Section 3: Past 30 Days Streak */}
+              {/* Section 4: Past 30 Days Streak */}
               <div className="p-4 rounded-2xl bg-surface-subtle/60 border border-surface-border space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
@@ -1096,9 +1168,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    setJuzTallyManually(manualTallyInput, manualCompletedJuzs);
-                    setCompletedStreakDaysManually(manualStreakDays);
-                    setProgressSaveNotice("Juz tally and streaks successfully updated!");
+                    setTallyAndStreakProgressManually({
+                      tally: manualTallyInput,
+                      completedIds: manualCompletedJuzs,
+                      streakDays: manualStreakDays,
+                      todayJuzCount: manualTodayJuzInput,
+                    });
+                    setProgressSaveNotice("Juz tally, streaks, and today's count successfully updated!");
                     setTimeout(() => setProgressSaveNotice(null), 3000);
                   }}
                   className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-brand-primary hover:bg-brand-hover text-white font-bold text-sm shadow-md transition active:scale-98 cursor-pointer"

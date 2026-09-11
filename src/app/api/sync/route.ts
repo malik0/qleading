@@ -26,7 +26,8 @@ function getSessionToken(req: Request): string | null {
  */
 function mergeHistoryRecords(
   local: Record<string, DayReadingRecord> = {},
-  remote: Record<string, DayReadingRecord> = {}
+  remote: Record<string, DayReadingRecord> = {},
+  isClientNewer: boolean = true
 ): Record<string, DayReadingRecord> {
   const merged: Record<string, DayReadingRecord> = { ...remote, ...local };
 
@@ -41,17 +42,23 @@ function mergeHistoryRecords(
         combinedSlots[sNum] = Math.max(combinedSlots[sNum] || 0, locDay.slots[sNum] || 0);
       }
 
-      const combinedCompletedJuzIds = Array.from(
-        new Set([
-          ...(locDay.completedJuzIds || []),
-          ...(remDay.completedJuzIds || []),
-        ])
-      );
-      const combinedJuzCompletedCount = Math.max(
-        locDay.juzCompletedCount || 0,
-        remDay.juzCompletedCount || 0,
-        combinedCompletedJuzIds.length
-      );
+      const combinedCompletedJuzIds =
+        isClientNewer && locDay.completedJuzIds !== undefined
+          ? locDay.completedJuzIds
+          : Array.from(
+              new Set([
+                ...(locDay.completedJuzIds || []),
+                ...(remDay.completedJuzIds || []),
+              ])
+            );
+      const combinedJuzCompletedCount =
+        isClientNewer && locDay.juzCompletedCount !== undefined
+          ? locDay.juzCompletedCount
+          : Math.max(
+              locDay.juzCompletedCount || 0,
+              remDay.juzCompletedCount || 0,
+              combinedCompletedJuzIds.length
+            );
 
       merged[date] = {
         date,
@@ -190,7 +197,8 @@ export async function POST(req: Request) {
     // Active playback lease is considered live if updated in the last 60 seconds
     const isServerPlaybackActive = serverIsPlaying && (nowMs - serverUpdatedAtMs < 60000);
 
-    const mergedHistory = mergeHistoryRecords(clientState.historyRecords, existingHistory);
+    const isClientNewer = clientTime >= serverUpdatedAtMs;
+    const mergedHistory = mergeHistoryRecords(clientState.historyRecords, existingHistory, isClientNewer);
     const mergedLogs = mergeUserLogs(clientState.userLogs, existingLogs);
 
     let resolvedJuzId: number;
@@ -302,18 +310,24 @@ export async function POST(req: Request) {
       existingSettings = JSON.parse(existingRow.settings_json || "{}");
     } catch {}
 
-    const resolvedCompletedJuzs = Array.from(
-      new Set([
-        ...(clientState.completedJuzs || []),
-        ...(existingSettings.completedJuzs || []),
-      ])
-    ).sort((a, b) => a - b);
+    const resolvedCompletedJuzs =
+      isClientNewer && clientState.completedJuzs !== undefined
+        ? clientState.completedJuzs
+        : Array.from(
+            new Set([
+              ...(clientState.completedJuzs || []),
+              ...(existingSettings.completedJuzs || []),
+            ])
+          ).sort((a, b) => a - b);
 
-    const resolvedJuzTally = Math.max(
-      clientState.juzTally || 0,
-      existingSettings.juzTally || 0,
-      resolvedCompletedJuzs.length
-    );
+    const resolvedJuzTally =
+      isClientNewer && clientState.juzTally !== undefined
+        ? clientState.juzTally
+        : Math.max(
+            clientState.juzTally || 0,
+            existingSettings.juzTally || 0,
+            resolvedCompletedJuzs.length
+          );
 
     // Resolve khatmPlan: latest updatedAt wins
     const clientKhatm = clientState.khatmPlan || body.settings?.khatmPlan;

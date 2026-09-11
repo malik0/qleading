@@ -115,7 +115,14 @@ interface AppContextType {
   juzTally: number;
   toggleJuzCompleted: (juzId: number) => void;
   setJuzTallyManually: (tally: number, completedIds?: number[]) => void;
+  setTodayJuzCountManually: (count: number) => void;
   setCompletedStreakDaysManually: (daysCount: number) => void;
+  setTallyAndStreakProgressManually: (params: {
+    tally: number;
+    completedIds?: number[];
+    streakDays?: number;
+    todayJuzCount?: number;
+  }) => void;
   toggleDayStreakManually: (dateStr: string) => void;
 
   // Khatm Planner
@@ -1976,6 +1983,35 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
     [updateStateAndPersist, syncWithServer]
   );
 
+  const setTodayJuzCountManually = useCallback(
+    (count: number) => {
+      const validCount = Math.max(0, Math.round(count));
+      const todayStr = getLocalDateString();
+      updateStateAndPersist((s) => {
+        const history = { ...s.historyRecords };
+        const existing = history[todayStr] || {
+          date: todayStr,
+          secondsRead: 0,
+          targetReached: false,
+          slots: {},
+          juzCompletedCount: 0,
+          completedJuzIds: [],
+        };
+        history[todayStr] = {
+          ...existing,
+          juzCompletedCount: validCount,
+          targetReached: validCount > 0 ? true : existing.targetReached,
+        };
+        return {
+          ...s,
+          historyRecords: history,
+        };
+      });
+      syncWithServer();
+    },
+    [updateStateAndPersist, syncWithServer]
+  );
+
   const setCompletedStreakDaysManually = useCallback(
     (daysCount: number) => {
       const clampedDays = Math.max(0, Math.min(30, Math.round(daysCount)));
@@ -2005,6 +2041,79 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
         }
         return {
           ...s,
+          historyRecords: history,
+        };
+      });
+      syncWithServer();
+    },
+    [updateStateAndPersist, syncWithServer]
+  );
+
+  const setTallyAndStreakProgressManually = useCallback(
+    ({
+      tally,
+      completedIds,
+      streakDays,
+      todayJuzCount,
+    }: {
+      tally: number;
+      completedIds?: number[];
+      streakDays?: number;
+      todayJuzCount?: number;
+    }) => {
+      const validTally = Math.max(0, Math.round(tally));
+      const today = new Date();
+      const todayStr = getLocalDateString(today);
+
+      updateStateAndPersist((s) => {
+        const history = { ...s.historyRecords };
+
+        if (streakDays !== undefined) {
+          const clampedDays = Math.max(0, Math.min(30, Math.round(streakDays)));
+          for (let i = 0; i < 30; i++) {
+            const d = new Date(today);
+            d.setDate(today.getDate() - i);
+            const dStr = getLocalDateString(d);
+            const existing = history[dStr] || {
+              date: dStr,
+              secondsRead: 0,
+              targetReached: false,
+              slots: {},
+              juzCompletedCount: 0,
+              completedJuzIds: [],
+            };
+            const shouldBeCompleted = i < clampedDays;
+            history[dStr] = {
+              ...existing,
+              targetReached: shouldBeCompleted,
+              juzCompletedCount: shouldBeCompleted
+                ? Math.max(1, existing.juzCompletedCount || 1)
+                : 0,
+            };
+          }
+        }
+
+        if (todayJuzCount !== undefined) {
+          const validTodayCount = Math.max(0, Math.round(todayJuzCount));
+          const existingToday = history[todayStr] || {
+            date: todayStr,
+            secondsRead: 0,
+            targetReached: false,
+            slots: {},
+            juzCompletedCount: 0,
+            completedJuzIds: [],
+          };
+          history[todayStr] = {
+            ...existingToday,
+            juzCompletedCount: validTodayCount,
+            targetReached: validTodayCount > 0 ? true : existingToday.targetReached,
+          };
+        }
+
+        return {
+          ...s,
+          juzTally: validTally,
+          ...(completedIds ? { completedJuzs: completedIds } : {}),
           historyRecords: history,
         };
       });
@@ -2404,7 +2513,9 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
         juzTally: userState.juzTally ?? (userState.completedJuzs ? userState.completedJuzs.length : 0),
         toggleJuzCompleted,
         setJuzTallyManually,
+        setTodayJuzCountManually,
         setCompletedStreakDaysManually,
+        setTallyAndStreakProgressManually,
         toggleDayStreakManually,
         khatmPlan: userState.khatmPlan || settings.khatmPlan || null,
         saveKhatmPlan,
