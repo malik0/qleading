@@ -5,6 +5,7 @@ import { useApp } from "../context/AppContext";
 import { formatAudioTime, formatHeroTimer } from "../lib/utils";
 import { ChevronDown, Volume2, SlidersHorizontal, Clock, X } from "lucide-react";
 import { TimerModal } from "./TimerModal";
+import { PlaybackControls } from "./PlaybackControls";
 
 const formatDisplayRange = (range: string) => {
   if (!range) return "";
@@ -38,14 +39,17 @@ export const JuzDisplay: React.FC = () => {
   const [mounted, setMounted] = useState(false);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
   const listContainerRef = useRef<HTMLDivElement | null>(null);
+  const hasScrolledRef = useRef(false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
   // Auto-scroll dropdown to current Juz when opened (centered with 2 items above, current, 2 items below)
+  // Only scrolls once upon opening, allowing the user to freely scroll up to previous Juzes
   useEffect(() => {
-    if (isDropdownOpen && listContainerRef.current) {
+    if (isDropdownOpen && listContainerRef.current && !hasScrolledRef.current) {
+      hasScrolledRef.current = true;
       const currentIdx = juzList.findIndex((item) => item.id === currentJuzId);
       if (currentIdx !== -1) {
         const itemStep = 56; // 52px item height + 4px gap
@@ -58,6 +62,8 @@ export const JuzDisplay: React.FC = () => {
         });
         return () => cancelAnimationFrame(raf);
       }
+    } else if (!isDropdownOpen) {
+      hasScrolledRef.current = false;
     }
   }, [isDropdownOpen, currentJuzId, juzList]);
 
@@ -411,6 +417,9 @@ export const JuzDisplay: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* 2.0 - 2.3 PLAYBACK CONTROLS */}
+      <PlaybackControls />
 
       {/* Timer Adjust & Reset Modal */}
       <TimerModal

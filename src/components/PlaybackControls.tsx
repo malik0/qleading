@@ -41,7 +41,7 @@ export const PlaybackControls: React.FC = () => {
   const audioTimeFormatted = formatAudioTime(adjustedRemaining);
 
   return (
-    <div className="w-full bg-surface-card border border-surface-border rounded-2xl sm:rounded-3xl p-4 sm:p-5 backdrop-blur-xl shadow-xl space-y-4 transition-colors duration-200">
+    <div className="w-full space-y-4 mt-4 sm:mt-5 pt-1">
       {/* Device sync notice banner */}
       {syncNotice && (
         <div className="text-center text-xs font-medium text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 py-2 px-3 sm:px-4 rounded-xl sm:rounded-2xl animate-fadeIn flex items-center justify-center gap-2">

@@ -4,7 +4,6 @@ import React, { useState, useEffect } from "react";
 import { Header } from "../components/Header";
 import { QLogo } from "../components/QLogo";
 import { JuzDisplay } from "../components/JuzDisplay";
-import { PlaybackControls } from "../components/PlaybackControls";
 import { StreakCounter } from "../components/StreakCounter";
 import { ReadingChart } from "../components/ReadingChart";
 import { JuzListTable } from "../components/JuzListTable";
@@ -48,8 +47,7 @@ export default function Home() {
           </div>
         </header>
         <main className="flex-1 max-w-4xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6 animate-pulse">
-          <div className="h-64 rounded-3xl bg-surface-card border border-surface-border" />
-          <div className="h-32 rounded-3xl bg-surface-card border border-surface-border" />
+          <div className="h-[460px] rounded-3xl bg-surface-card border border-surface-border" />
         </main>
       </div>
     );
@@ -65,11 +63,8 @@ export default function Home() {
 
       {/* Main Container */}
       <main className="flex-1 max-w-4xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
-        {/* 1.0 - 1.4 JUZ DISPLAY & HERO TIMER */}
+        {/* 1.0 - 2.3 JUZ DISPLAY, HERO TIMER & PLAYBACK CONTROLS (UNIFIED SINGLE PANEL) */}
         <JuzDisplay />
-
-        {/* 2.0 - 2.3 PLAYBACK CONTROLS */}
-        <PlaybackControls />
 
         {/* 4.0 - 4.4 STREAK COUNTER (WEEKLY M T W T F S S & MONTHLY CALENDAR) */}
         <StreakCounter />

@@ -7,6 +7,7 @@ import React, {
   useEffect,
   useRef,
   useCallback,
+  useMemo,
   ReactNode,
 } from "react";
 import {
@@ -168,6 +169,8 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
 
   // Audio state
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const preloadAudioRef = useRef<HTMLAudioElement | null>(null);
+  const preloadedJuzIdRef = useRef<number | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackPosition, setPlaybackPosition] = useState(0);
   const initialDuration =
@@ -364,11 +367,15 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
   }, []);
 
   // Construct active Juz list with custom overrides
-  const juzList: JuzInfo[] = INITIAL_JUZ_LIST.map((j) => ({
-    ...j,
-    customName: settings.customJuzNames[j.id] || undefined,
-    customRange: settings.customJuzRanges[j.id] || undefined,
-  }));
+  const juzList: JuzInfo[] = useMemo(
+    () =>
+      INITIAL_JUZ_LIST.map((j) => ({
+        ...j,
+        customName: settings.customJuzNames?.[j.id] || undefined,
+        customRange: settings.customJuzRanges?.[j.id] || undefined,
+      })),
+    [settings.customJuzNames, settings.customJuzRanges]
+  );
 
   const currentJuz =
     juzList.find((j) => j.id === userState.currentJuzId) || juzList[0];
@@ -395,6 +402,44 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
   );
 
   const activeAudioUrl = getAudioUrlForJuz(currentJuz);
+
+  // Synchronize audio element src with activeAudioUrl
+  // Uses isSameAudioUrl to avoid rewriting DOM .src when URLs match, preventing
+  // the browser from aborting ongoing playback or resetting the media pipeline.
+  useEffect(() => {
+    if (!audioRef.current || !activeAudioUrl) return;
+    if (!isSameAudioUrl(audioRef.current.src, activeAudioUrl)) {
+      const wasPlaying = isPlayingRef.current;
+      audioRef.current.src = activeAudioUrl;
+      const spd = playbackSpeedRef.current || playbackSpeed || 1.0;
+      audioRef.current.playbackRate = spd;
+      audioRef.current.defaultPlaybackRate = spd;
+      if (wasPlaying) {
+        audioRef.current.play().catch((err) => {
+          console.warn("Audio sync playback failed:", err);
+          setIsPlaying(false);
+          isPlayingRef.current = false;
+        });
+      }
+    }
+  }, [activeAudioUrl, playbackSpeed]);
+
+  // Preload upcoming Juz audio in the background to ensure zero-latency gapless transitions
+  const triggerPreloadNext = useCallback(() => {
+    const curId = userStateRef.current.currentJuzId || 1;
+    const nextId = curId < 30 ? curId + 1 : 1;
+    if (preloadedJuzIdRef.current === nextId) return;
+
+    const nextJuz = INITIAL_JUZ_LIST.find((j) => j.id === nextId) || INITIAL_JUZ_LIST[0];
+    const nextUrl = getAudioUrlForJuz(nextJuz);
+
+    preloadedJuzIdRef.current = nextId;
+    if (preloadAudioRef.current) {
+      preloadAudioRef.current.src = nextUrl;
+      preloadAudioRef.current.preload = "auto";
+      preloadAudioRef.current.load();
+    }
+  }, [getAudioUrlForJuz]);
 
   // Update Settings
   const updateSettings = useCallback((partial: Partial<AppSettings>) => {
@@ -1257,6 +1302,8 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
       saveSyncPoint("Playback Start");
     } catch (e) {
       console.warn("Playback error:", e);
+      setIsPlaying(false);
+      isPlayingRef.current = false;
     }
   }, [broadcastPlayback, getAudioUrlForJuz, saveSyncPoint]);
 
@@ -1370,26 +1417,14 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
     [updateSettings, updateStateAndPersist]
   );
 
-  // Dropdown Juz Selection with Confirmation Prompt
-  const selectJuz = useCallback(
-    (juzId: number) => {
-      if (juzId === userState.currentJuzId) return;
-      if (isPlaying) {
-        // Confirm with user before interrupting active playback
-        setPendingJuzSwitch(juzId);
-      } else {
-        confirmJuzSwitch(juzId);
-      }
-    },
-    [isPlaying, userState.currentJuzId]
-  );
-
   const confirmJuzSwitch = useCallback(
     (juzId: number) => {
       recordAccident("switch_juz", `Switched to Juz ${juzId}`);
       setPendingJuzSwitch(null);
+      isTransitioningRef.current = true;
       setPlaybackPosition(0);
       playbackPosRef.current = 0;
+      preloadedJuzIdRef.current = null;
 
       const targetJuz = INITIAL_JUZ_LIST.find((j) => j.id === juzId) || INITIAL_JUZ_LIST[0];
       const targetUrl = getAudioUrlForJuz(targetJuz);
@@ -1397,39 +1432,63 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
       setDuration(targetDuration);
       durationRef.current = targetDuration;
 
+      const activePlaybackSpeed = playbackSpeedRef.current || playbackSpeed || 1.0;
+      const nextTimerSec = Math.round(targetDuration / activePlaybackSpeed);
+
       updateStateAndPersist((s) => ({
         ...s,
         currentJuzId: juzId,
         playbackPositionSeconds: 0,
+        timerSeconds: nextTimerSec,
         isPlaying: true,
       }));
 
-      // Directly update and load the new track on the audio element
+      // Directly update the track on the audio element
       if (audioRef.current) {
-        audioRef.current.pause();
+        if (preloadAudioRef.current) {
+          preloadAudioRef.current.removeAttribute("src");
+          preloadAudioRef.current.load();
+        }
         audioRef.current.src = targetUrl;
         audioRef.current.currentTime = 0;
-        if (playbackSpeed) {
-          audioRef.current.playbackRate = playbackSpeed;
-          audioRef.current.defaultPlaybackRate = playbackSpeed;
-        }
-        audioRef.current.load();
+        audioRef.current.playbackRate = activePlaybackSpeed;
+        audioRef.current.defaultPlaybackRate = activePlaybackSpeed;
         const playPromise = audioRef.current.play();
         if (playPromise !== undefined) {
           playPromise
             .then(() => {
               setIsPlaying(true);
               isPlayingRef.current = true;
+              isTransitioningRef.current = false;
               broadcastPlayback("PLAY", { juzId, position: 0 });
             })
             .catch((err) => {
               console.warn("Track switch play error:", err);
+              setIsPlaying(false);
+              isPlayingRef.current = false;
+              isTransitioningRef.current = false;
             });
+        } else {
+          setIsPlaying(true);
+          isPlayingRef.current = true;
+          isTransitioningRef.current = false;
         }
       }
+      setTimeout(() => {
+        isTransitioningRef.current = false;
+      }, 2000);
       syncWithServer();
     },
     [recordAccident, getAudioUrlForJuz, playbackSpeed, updateStateAndPersist, broadcastPlayback, syncWithServer]
+  );
+
+  // Dropdown Juz Selection: Directly switch to the selected Juz
+  const selectJuz = useCallback(
+    (juzId: number) => {
+      if (juzId === userState.currentJuzId) return;
+      confirmJuzSwitch(juzId);
+    },
+    [confirmJuzSwitch, userState.currentJuzId]
   );
 
   const cancelJuzSwitch = useCallback(() => {
@@ -1596,7 +1655,10 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
       // Check if audio finished (backup trigger if ended event was missed)
       if (audioRef.current && isPlayingRef.current) {
         const ct = audioRef.current.currentTime;
-        const dur = audioRef.current.duration;
+        const dur = audioRef.current.duration || durationRef.current;
+        if (dur && isFinite(dur) && dur > 60 && ct >= dur - 60) {
+          triggerPreloadNext();
+        }
         if (audioRef.current.ended || (dur && isFinite(dur) && dur > 5 && ct >= dur - 0.3)) {
           handleAudioEnded();
           return;
@@ -1769,30 +1831,43 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
       };
     });
 
-    // 4. Reset position tracking
+    // 4. Reset position tracking & preload cache tracking
     setPlaybackPosition(0);
     playbackPosRef.current = 0;
+    preloadedJuzIdRef.current = null;
 
-    // 5. Directly load and play the next audio file
+    // 5. Directly transition and play the next audio file
     if (audioRef.current) {
-      audioRef.current.pause();
+      // Release background preload element to avoid concurrent connection contention
+      if (preloadAudioRef.current) {
+        preloadAudioRef.current.removeAttribute("src");
+        preloadAudioRef.current.load();
+      }
+
       audioRef.current.src = nextUrl;
       audioRef.current.currentTime = 0;
-      if (playbackSpeed) {
-        audioRef.current.playbackRate = playbackSpeed;
-      }
-      audioRef.current.load();
+      const activeSpd = playbackSpeedRef.current || playbackSpeed || 1.0;
+      audioRef.current.playbackRate = activeSpd;
+      audioRef.current.defaultPlaybackRate = activeSpd;
       const playPromise = audioRef.current.play();
       if (playPromise !== undefined) {
         playPromise
           .then(() => {
             setIsPlaying(true);
             isPlayingRef.current = true;
+            isTransitioningRef.current = false;
             broadcastPlayback("PLAY", { juzId: nextJuzId, position: 0 });
           })
           .catch((err) => {
             console.warn("Auto-play next track error:", err);
+            setIsPlaying(false);
+            isPlayingRef.current = false;
+            isTransitioningRef.current = false;
           });
+      } else {
+        setIsPlaying(true);
+        isPlayingRef.current = true;
+        isTransitioningRef.current = false;
       }
     }
   }, [
@@ -1801,6 +1876,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
     getAudioUrlForJuz,
     updateStateAndPersist,
     broadcastPlayback,
+    saveSyncPoint,
   ]);
 
   // Audio Ended Handler: Automatic Playlist Continuous Playback
@@ -1811,7 +1887,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
     moveToNextJuz();
     setTimeout(() => {
       isTransitioningRef.current = false;
-    }, 1500);
+    }, 2000);
   }, [moveToNextJuz, saveSyncPoint]);
 
   // Juz Checklist: Tap to mark done or undone
@@ -2343,15 +2419,19 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
       }}
     >
       {/* Underlying Audio Element with CDN Fallback Error Handling */}
+      {/* Note: src is managed via the audio sync useEffect & imperative controls rather than a JSX attribute */}
+      {/* to prevent React virtual DOM re-renders from re-assigning .src and aborting active playback. */}
       <audio
         ref={audioRef}
-        src={activeAudioUrl}
         preload="metadata"
         onTimeUpdate={(e) => {
           const ct = e.currentTarget.currentTime;
           const dur = e.currentTarget.duration;
           setPlaybackPosition(ct);
           playbackPosRef.current = ct;
+          if (dur && isFinite(dur) && dur > 60 && ct >= dur - 60) {
+            triggerPreloadNext();
+          }
           if (dur && isFinite(dur) && dur > 5 && ct >= dur - 0.3) {
             handleAudioEnded();
           }
@@ -2375,7 +2455,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
           }
         }}
         onPause={(e) => {
-          if (isPlayingRef.current) {
+          if (isPlayingRef.current && !isTransitioningRef.current) {
             setIsPlaying(false);
             isPlayingRef.current = false;
             const currentPos = e.currentTarget.currentTime;
@@ -2391,6 +2471,14 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
             setFailedLocalJuzs((prev) => ({ ...prev, [currentJuz.id]: true }));
           }
         }}
+      />
+      {/* Background Preload Audio Element to warm up and buffer upcoming track */}
+      <audio
+        ref={preloadAudioRef}
+        preload="none"
+        style={{ display: "none" }}
+        aria-hidden="true"
+        muted
       />
       {children}
     </AppContext.Provider>
