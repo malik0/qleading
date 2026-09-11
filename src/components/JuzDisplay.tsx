@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useApp } from "../context/AppContext";
 import { formatAudioTime, formatHeroTimer } from "../lib/utils";
-import { ChevronDown, Volume2, SlidersHorizontal, Clock, X } from "lucide-react";
+import { ChevronDown, Volume2, Clock, X } from "lucide-react";
 import { TimerModal } from "./TimerModal";
 import { PlaybackControls } from "./PlaybackControls";
 
@@ -218,11 +218,6 @@ export const JuzDisplay: React.FC = () => {
             </div>
           )}
 
-          {/* Interactive Hint Pill */}
-          <div className="mt-1.5 flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] bg-surface-subtle group-hover:bg-surface-hover border border-surface-border text-content-muted group-hover:text-content-primary transition shadow-sm">
-            <SlidersHorizontal className="w-3 h-3 text-brand-primary group-hover:rotate-90 transition-transform duration-300 shrink-0" />
-            <span>Click to edit or match audio</span>
-          </div>
         </button>
 
         {/* How Much Listened Today */}
