@@ -38,7 +38,7 @@ export const MediaDownloadsList: React.FC = () => {
       // Trigger download via anchor
       const a = document.createElement("a");
       a.href = item.localAudioUrl;
-      a.download = `${name.replace(/\s+/g, "_")}_MaherAlMuaiqly.webm`;
+      a.download = `${name.replace(/\s+/g, "_")}_SaudAlShuraim.webm`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -75,7 +75,7 @@ export const MediaDownloadsList: React.FC = () => {
                 Media downloads
               </h4>
               <p className="text-xs text-content-muted">
-                Download complete 30 Juz audio recitation by Sheikh Maher Al-Muaiqly
+                Download complete 30 Juz audio recitation by Sheikh Saud Al-Shuraim
               </p>
             </div>
           </div>
@@ -183,7 +183,7 @@ export const MediaDownloadsList: React.FC = () => {
 
                 <a
                   href={item.localAudioUrl}
-                  download={`${name.replace(/\s+/g, "_")}_MaherAlMuaiqly.webm`}
+                  download={`${name.replace(/\s+/g, "_")}_SaudAlShuraim.webm`}
                   title={`Download ${name} Audio`}
                   className="px-3 py-1.5 rounded-xl bg-surface-subtle hover:bg-surface-hover text-content-secondary hover:text-content-primary border border-surface-border transition flex items-center gap-1.5 text-xs font-semibold shadow-xs active:scale-95"
                 >

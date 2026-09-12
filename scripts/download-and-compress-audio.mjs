@@ -67,7 +67,7 @@ async function processJuz(juzNum) {
 }
 
 async function main() {
-  console.log("Starting download and compression for Sheikh Maher Al Muaiqly (30 Juzs)...");
+  console.log("Starting download and compression for Sheikh Saud Al-Shuraim (30 Juzs)...");
   console.log(`Target directory: ${outputDir}`);
 
   for (let i = 1; i <= 30; i++) {

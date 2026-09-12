@@ -318,7 +318,10 @@ export const KhatmPlanner: React.FC = () => {
   }, [scheduleData, filterMode]);
 
   return (
-    <section className="w-full bg-surface-card border border-surface-border rounded-2xl sm:rounded-3xl p-4 sm:p-7 backdrop-blur-xl shadow-xl space-y-5 sm:space-y-6 transition-colors duration-200">
+    <section
+      id="khatm-planner"
+      className="w-full bg-surface-card border border-surface-border rounded-2xl sm:rounded-3xl p-4 sm:p-7 backdrop-blur-xl shadow-xl space-y-5 sm:space-y-6 transition-colors duration-200 scroll-mt-20"
+    >
       {/* Header without icon and subtitle */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
         <div className="flex items-center gap-2">
@@ -718,7 +721,7 @@ export const KhatmPlanner: React.FC = () => {
           })()}
 
           {/* Plan Meta Overview Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
+          <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
             <div className="p-3 sm:p-3.5 rounded-2xl bg-surface-subtle border border-surface-border">
               <div className="text-[11px] font-medium text-content-muted">Start Date</div>
               <div className="text-xs sm:text-sm font-bold text-content-primary mt-0.5">
@@ -736,40 +739,6 @@ export const KhatmPlanner: React.FC = () => {
               </div>
               <div className="text-[10px] text-content-muted mt-0.5">
                 {scheduleData.durationDays} days total
-              </div>
-            </div>
-
-            <div className="p-3 sm:p-3.5 rounded-2xl bg-surface-subtle border border-surface-border">
-              <div className="text-[11px] font-medium text-content-muted">Daily Target</div>
-              <div className="text-xs sm:text-sm font-bold text-content-primary mt-0.5">
-                {khatmPlan!.amountPerDay} Juz / day
-              </div>
-              <div className="text-[10px] text-content-muted mt-0.5">
-                {Math.round(khatmPlan!.durationDays * khatmPlan!.amountPerDay)} Juzes target
-              </div>
-            </div>
-
-            <div className="p-3 sm:p-3.5 rounded-2xl bg-surface-subtle border border-surface-border">
-              <div className="text-[11px] font-medium text-content-muted">Pace Status</div>
-              <div className="text-xs sm:text-sm font-bold text-content-primary mt-0.5 flex items-center gap-1.5">
-                {scheduleData.isFinished ? (
-                  <span className="text-emerald-500 font-bold flex items-center gap-1">
-                    <Trophy className="w-3.5 h-3.5" /> Finished!
-                  </span>
-                ) : scheduleData.paceDiff > 0 ? (
-                  <span className="text-emerald-500 font-bold flex items-center gap-1">
-                    <Flame className="w-3.5 h-3.5" /> +{scheduleData.paceDiff} Ahead
-                  </span>
-                ) : scheduleData.paceDiff === 0 ? (
-                  <span className="text-sky-500 font-bold">On Schedule</span>
-                ) : (
-                  <span className="text-amber-500 font-bold">
-                    {Math.abs(scheduleData.paceDiff)} Behind
-                  </span>
-                )}
-              </div>
-              <div className="text-[10px] text-content-muted mt-0.5">
-                {scheduleData.completedCount} of {scheduleData.durationDays} days done
               </div>
             </div>
           </div>
@@ -978,14 +947,6 @@ export const KhatmPlanner: React.FC = () => {
 
               {/* Filters & Jump to Today */}
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleJumpToToday}
-                  className="px-2.5 py-1 rounded-xl text-xs font-semibold bg-brand-light text-brand-primary border border-brand-primary/20 hover:bg-brand-light/80 transition active:scale-95"
-                >
-                  Jump to Today
-                </button>
-
                 <div className="flex items-center p-0.5 rounded-xl bg-surface-subtle border border-surface-border text-xs">
                   <button
                     type="button"
@@ -1021,6 +982,14 @@ export const KhatmPlanner: React.FC = () => {
                     Done ({scheduleData.completedCount})
                   </button>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={handleJumpToToday}
+                  className="px-2.5 py-1 rounded-xl text-xs font-semibold bg-brand-light text-brand-primary border border-brand-primary/20 hover:bg-brand-light/80 transition active:scale-95"
+                >
+                  Jump to Today
+                </button>
               </div>
             </div>
 

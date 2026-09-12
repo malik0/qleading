@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400;1,700&family=Amiri+Quran&family=Noto+Naskh+Arabic:wght@400;600;700&family=Noto+Nastaliq+Urdu:wght@400;600;700&family=Scheherazade+New:wght@400;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -497,4 +499,35 @@
 .animate-slideUp {
   animation: slideUp 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
+
+/* Arabic Quran Script Typography Utilities */
+.quran-arabic-text {
+  direction: rtl;
+  text-align: right;
+  word-spacing: 2px;
+  letter-spacing: 0;
+  line-height: 2.2;
+}
+
+.font-amiri-quran {
+  font-family: 'Amiri Quran', 'Amiri', 'Scheherazade New', serif;
+}
+
+.font-noto-nastaliq {
+  font-family: 'Noto Nastaliq Urdu', 'Al Qalam Quran', serif;
+  line-height: 2.5;
+}
+
+.font-scheherazade {
+  font-family: 'Scheherazade New', 'Amiri', serif;
+}
+
+.font-noto-naskh {
+  font-family: 'Noto Naskh Arabic', sans-serif;
+}
+
+.font-amiri-classic {
+  font-family: 'Amiri', serif;
+}
+
 

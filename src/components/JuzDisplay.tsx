@@ -144,17 +144,58 @@ export const JuzDisplay: React.FC = () => {
 
   return (
     <div className="w-full bg-surface-card border border-surface-border rounded-2xl sm:rounded-3xl p-4 sm:p-5 backdrop-blur-xl shadow-2xl relative z-20 transition-colors duration-200">
-      {/* Creative Top Border Khatm Progress Bar (zero layout shift, flush along top edge) */}
+      {/* Seamless Top Border Khatm Progress Bar & Floating Percentage Bubble */}
       {khatmPlan && khatmPlan.durationDays > 0 && (
-        <div
-          className="absolute top-0 left-0 right-0 h-1 sm:h-1.5 overflow-hidden rounded-t-2xl sm:rounded-t-3xl pointer-events-none z-30"
-          title={`Khatm Progress: ${khatmProgressPercent}% (${khatmPlan.completedDays?.length || 0} of ${khatmPlan.durationDays} days completed)`}
-        >
+        <>
+          {/* Seamless Khatm Progress Bar Layer (Flush with Display Block outer edges, matching border radius without distortion) */}
           <div
-            className="h-full bg-gradient-to-r from-brand-primary via-emerald-400 to-brand-primary transition-all duration-700 ease-out shadow-[0_0_8px_rgba(var(--color-primary-rgb),0.6)]"
-            style={{ width: `${khatmProgressPercent}%` }}
-          />
-        </div>
+            className="absolute -top-px -left-px -right-px -bottom-px rounded-2xl sm:rounded-3xl overflow-hidden pointer-events-none z-20"
+            title={`Khatm Progress: ${khatmProgressPercent}% (${khatmPlan.completedDays?.length || 0} of ${khatmPlan.durationDays} days completed)`}
+          >
+            {/* Background Track across the top */}
+            <div className="w-full h-1 sm:h-1.5 bg-brand-primary/10 dark:bg-brand-primary/15 relative">
+              {/* Progress Fill adapting dynamically to user selected theme */}
+              <div
+                className="h-full bg-gradient-to-r from-brand-primary via-brand-hover to-brand-primary rounded-r-full transition-all duration-700 ease-out"
+                style={{
+                  width: `${khatmProgressPercent}%`,
+                  boxShadow: "0 0 10px var(--color-primary-glow)",
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Floating Percentage Bubble Underneath the Progress Bar */}
+          <div
+            className="absolute top-[3px] sm:top-[5px] pointer-events-auto z-30 transition-all duration-700 ease-out cursor-pointer group/khatm-bubble"
+            style={{
+              left: `clamp(24px, ${khatmProgressPercent}%, calc(100% - 24px))`,
+              transform: "translateX(-50%)",
+            }}
+            onClick={() => {
+              const el = document.getElementById("khatm-planner");
+              if (el) {
+                el.scrollIntoView({ behavior: "smooth" });
+              }
+            }}
+            title={`Khatm Progress: ${khatmProgressPercent}% (${khatmPlan.completedDays?.length || 0} of ${khatmPlan.durationDays} days completed). Click to view Khatm Planner.`}
+          >
+            <div className="flex flex-col items-center">
+              {/* Caret pointing directly up to the progress bar */}
+              <div className="w-0 h-0 border-x-[3.5px] border-x-transparent border-b-[4px] border-b-brand-primary transition-colors duration-200 group-hover/khatm-bubble:brightness-110" />
+
+              {/* Bubble Pill Body */}
+              <div
+                className="px-2 py-0.5 rounded-full bg-brand-primary text-white text-[10px] font-bold font-mono tracking-tight transition-all duration-200 group-hover/khatm-bubble:scale-105 group-hover/khatm-bubble:brightness-110 flex items-center gap-0.5 select-none leading-none"
+                style={{
+                  boxShadow: "0 2px 8px var(--color-primary-glow)",
+                }}
+              >
+                <span>{khatmProgressPercent}%</span>
+              </div>
+            </div>
+          </div>
+        </>
       )}
 
       {/* Subtle Background Glows matching active theme (isolated in overflow-hidden layer) */}
@@ -206,15 +247,8 @@ export const JuzDisplay: React.FC = () => {
             </div>
           )}
 
-          {/* Active status indicator & Today's Date and Time */}
-          <div className="flex items-center gap-2 mb-1 max-w-full">
-            <span
-              className={`w-2 h-2 rounded-full transition-all shrink-0 ${
-                isTimerRunning
-                  ? "bg-brand-primary animate-ping"
-                  : "bg-content-muted/40"
-              }`}
-            />
+          {/* Today's Date and Time */}
+          <div className="flex items-center justify-center mb-1 max-w-full">
             <span className="text-xs font-semibold tracking-wide text-content-muted group-hover:text-brand-primary transition truncate">
               {formattedDateTime || "\u00A0"}
             </span>

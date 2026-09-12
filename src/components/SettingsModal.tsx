@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { useApp } from "../context/AppContext";
-import { DayOfWeek, PlaybackSpeed, ThemeColor, ThemeMode, TimerMode } from "../types/quran";
+import { DayOfWeek, MushafArabicFont, MushafScript, PlaybackSpeed, ThemeColor, ThemeMode, TimerMode } from "../types/quran";
 import {
   X,
   Sliders,
@@ -26,12 +26,15 @@ import {
   Minus,
   Plus,
   ArrowUp,
+  BookOpen,
 } from "lucide-react";
 import { MediaDownloadsList } from "./MediaDownloadsList";
+import { ARABIC_FONT_OPTIONS, QURAN_TRANSLATIONS, getFontFamilyForOption } from "../lib/quranApi";
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
+  initialTab?: "themes" | "general" | "mushaf" | "progress" | "juz" | "media";
 }
 
 export type ThemeCategory = "all" | "quranic" | "modern" | "contrast";
@@ -212,6 +215,7 @@ const COLOR_OPTIONS: ThemeOption[] = [
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
   onClose,
+  initialTab,
 }) => {
   const {
     settings,
@@ -233,8 +237,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<
-    "themes" | "general" | "progress" | "juz" | "media"
+    "themes" | "general" | "mushaf" | "progress" | "juz" | "media"
   >("themes");
+
+  React.useEffect(() => {
+    if (isOpen && initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [isOpen, initialTab]);
+
+  React.useEffect(() => {
+    const handleOpenSettings = (e: Event) => {
+      const customEvent = e as CustomEvent<{
+        tab?: "themes" | "general" | "mushaf" | "progress" | "juz" | "media";
+      }>;
+      if (customEvent.detail?.tab) {
+        setActiveTab(customEvent.detail.tab);
+      }
+    };
+    window.addEventListener("open-settings", handleOpenSettings);
+    return () => window.removeEventListener("open-settings", handleOpenSettings);
+  }, []);
   const [selectedCategory, setSelectedCategory] = useState<ThemeCategory>("all");
 
   // Local state for Juz editor
@@ -408,6 +431,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               }`}
             >
               <span>General & Playback</span>
+            </button>
+            <button
+              onClick={() => setActiveTab("mushaf")}
+              className={`py-1.5 sm:py-2 px-3 sm:px-4 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0 ${
+                activeTab === "mushaf"
+                  ? "bg-brand-primary text-white shadow-sm font-bold"
+                  : "bg-surface-card hover:bg-surface-hover text-content-secondary hover:text-content-primary border border-surface-border"
+              }`}
+            >
+              <BookOpen className="w-4 h-4" />
+              <span>Mushaf & Script</span>
             </button>
             <button
               onClick={() => setActiveTab("progress")}
@@ -783,6 +817,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     className="w-full bg-surface-subtle border border-surface-border rounded-xl px-3 py-2 text-sm text-content-primary focus:outline-none focus:border-brand-primary font-mono"
                   >
                     <option value={0.5}>0.5x (Slow)</option>
+                    <option value={0.75}>0.75x</option>
                     <option value={1.0}>1.0x (Normal - Default)</option>
                     <option value={1.25}>1.25x</option>
                     <option value={1.5}>1.5x</option>
@@ -953,6 +988,398 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     }
                     className="w-5 h-5 accent-brand-primary rounded cursor-pointer"
                   />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB: MUSHAF & ARABIC SCRIPT SETTINGS */}
+          {activeTab === "mushaf" && (
+            <div className="space-y-6 animate-fadeIn">
+              {/* Header Info */}
+              <div className="space-y-1">
+                <h4 className="text-sm font-bold text-content-primary flex items-center gap-2">
+                  <BookOpen className="w-4 h-4 text-brand-primary" />
+                  Mushaf Viewer &amp; Quranic Script Settings
+                </h4>
+                <p className="text-xs text-content-muted">
+                  Customize Arabic Quranic script (Uthmani vs Indo-Pak), calligraphy font, English translation, and font sizes for the Mushaf viewer.
+                </p>
+              </div>
+
+              {/* 1. Arabic Quranic Script Selection */}
+              <div className="space-y-3 p-4 rounded-2xl bg-surface-subtle/60 border border-surface-border">
+                <div>
+                  <label className="text-xs text-content-muted block font-semibold uppercase tracking-wider mb-1">
+                    1. Arabic Quranic Script
+                  </label>
+                  <span className="text-xs text-content-muted">
+                    Choose the Quranic orthography / writing style
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  {/* Uthmani Option */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      updateSettings({
+                        mushafScript: "uthmani",
+                        mushafArabicFont:
+                          settings.mushafArabicFont === "noto-nastaliq"
+                            ? "amiri-quran"
+                            : settings.mushafArabicFont,
+                      });
+                    }}
+                    className={`p-3.5 rounded-2xl border text-left transition flex flex-col justify-between gap-2.5 cursor-pointer ${
+                      (settings.mushafScript ?? "uthmani") === "uthmani"
+                        ? "border-brand-primary bg-brand-light/25 shadow-md ring-2 ring-brand-primary"
+                        : "border-surface-border bg-surface-card hover:bg-surface-hover"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-bold text-content-primary">
+                        Uthmani (Madinah Mushaf)
+                      </span>
+                      <span className="text-[10px] font-bold text-brand-primary bg-brand-light px-2 py-0.5 rounded-full">
+                        Standard Medina
+                      </span>
+                    </div>
+                    <div
+                      dir="rtl"
+                      lang="ar"
+                      className="text-lg font-amiri-quran text-content-primary text-right py-1 leading-relaxed"
+                    >
+                      بِسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ
+                    </div>
+                    <p className="text-[11px] text-content-muted">
+                      Official Medina Mushaf orthography used widely in Saudi Arabia, Egypt, and worldwide.
+                    </p>
+                  </button>
+
+                  {/* Indo-Pak Option */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      updateSettings({
+                        mushafScript: "indopak",
+                        mushafArabicFont: "noto-nastaliq",
+                      });
+                    }}
+                    className={`p-3.5 rounded-2xl border text-left transition flex flex-col justify-between gap-2.5 cursor-pointer ${
+                      settings.mushafScript === "indopak"
+                        ? "border-brand-primary bg-brand-light/25 shadow-md ring-2 ring-brand-primary"
+                        : "border-surface-border bg-surface-card hover:bg-surface-hover"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-bold text-content-primary">
+                        Indo-Pak (Subcontinent)
+                      </span>
+                      <span className="text-[10px] font-bold text-brand-primary bg-brand-light px-2 py-0.5 rounded-full">
+                        Nastaliq Style
+                      </span>
+                    </div>
+                    <div
+                      dir="rtl"
+                      lang="ar"
+                      className="text-lg font-noto-nastaliq text-content-primary text-right py-1 leading-loose"
+                    >
+                      بِسۡمِ اللهِ الرَّحۡمٰنِ الرَّحِيۡمِ
+                    </div>
+                    <p className="text-[11px] text-content-muted">
+                      15-line subcontinent Quran orthography popular in Pakistan, India, Bangladesh, and South Asia.
+                    </p>
+                  </button>
+                </div>
+              </div>
+
+              {/* 2. Arabic Calligraphy Font & Font Size */}
+              <div className="space-y-4 p-4 rounded-2xl bg-surface-subtle/60 border border-surface-border">
+                <div>
+                  <label className="text-xs text-content-muted block font-semibold uppercase tracking-wider mb-1">
+                    2. Arabic Calligraphy Font
+                  </label>
+                  <span className="text-xs text-content-muted">
+                    Choose the typeface and adjust the reading font size
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Font Typeface */}
+                  <div>
+                    <label className="text-xs text-content-secondary block mb-1.5 font-medium">
+                      Font Family
+                    </label>
+                    <select
+                      value={
+                        settings.mushafArabicFont ??
+                        ((settings.mushafScript ?? "uthmani") === "indopak"
+                          ? "noto-nastaliq"
+                          : "amiri-quran")
+                      }
+                      onChange={(e) =>
+                        updateSettings({
+                          mushafArabicFont: e.target.value as MushafArabicFont,
+                        })
+                      }
+                      className="w-full bg-surface-card border border-surface-border rounded-xl px-3 py-2 text-sm text-content-primary focus:outline-none focus:border-brand-primary"
+                    >
+                      {ARABIC_FONT_OPTIONS.map((font) => (
+                        <option key={font.id} value={font.id}>
+                          {font.name} — {font.description}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Font Size Stepper & Slider */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs text-content-secondary font-medium">
+                        Arabic Font Size
+                      </label>
+                      <span className="text-xs font-mono font-bold text-brand-primary">
+                        {settings.mushafArabicFontSize ?? 28} px
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          updateSettings({
+                            mushafArabicFontSize: Math.max(
+                              18,
+                              (settings.mushafArabicFontSize ?? 28) - 2
+                            ),
+                          })
+                        }
+                        title="Decrease font size"
+                        className="p-2 rounded-xl bg-surface-card hover:bg-surface-hover border border-surface-border text-content-secondary hover:text-content-primary transition cursor-pointer"
+                      >
+                        <Minus className="w-3.5 h-3.5" />
+                      </button>
+
+                      <input
+                        type="range"
+                        min={18}
+                        max={48}
+                        step={1}
+                        value={settings.mushafArabicFontSize ?? 28}
+                        onChange={(e) =>
+                          updateSettings({
+                            mushafArabicFontSize: parseInt(e.target.value, 10),
+                          })
+                        }
+                        className="flex-1 accent-brand-primary cursor-pointer"
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          updateSettings({
+                            mushafArabicFontSize: Math.min(
+                              52,
+                              (settings.mushafArabicFontSize ?? 28) + 2
+                            ),
+                          })
+                        }
+                        title="Increase font size"
+                        className="p-2 rounded-xl bg-surface-card hover:bg-surface-hover border border-surface-border text-content-secondary hover:text-content-primary transition cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => updateSettings({ mushafArabicFontSize: 28 })}
+                        title="Reset Arabic font size to default (28px)"
+                        className="px-2 py-1.5 rounded-lg bg-surface-card hover:bg-surface-hover border border-surface-border text-[11px] font-medium text-content-muted hover:text-content-primary cursor-pointer"
+                      >
+                        Default
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. English Translation & Translation Font Size */}
+              <div className="space-y-4 p-4 rounded-2xl bg-surface-subtle/60 border border-surface-border">
+                <div>
+                  <label className="text-xs text-content-muted block font-semibold uppercase tracking-wider mb-1">
+                    3. English Translation
+                  </label>
+                  <span className="text-xs text-content-muted">
+                    Select English translation source and adjust text size
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Translation Selector */}
+                  <div>
+                    <label className="text-xs text-content-secondary block mb-1.5 font-medium">
+                      Translation Author / Edition
+                    </label>
+                    <select
+                      value={settings.mushafTranslationId ?? 20}
+                      onChange={(e) =>
+                        updateSettings({
+                          mushafTranslationId: parseInt(e.target.value, 10),
+                        })
+                      }
+                      className="w-full bg-surface-card border border-surface-border rounded-xl px-3 py-2 text-sm text-content-primary focus:outline-none focus:border-brand-primary"
+                    >
+                      {QURAN_TRANSLATIONS.map((trans) => (
+                        <option key={trans.id} value={trans.id}>
+                          {trans.name} ({trans.author})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Translation Font Size */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs text-content-secondary font-medium">
+                        Translation Font Size
+                      </label>
+                      <span className="text-xs font-mono font-bold text-brand-primary">
+                        {settings.mushafTranslationFontSize ?? 16} px
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          updateSettings({
+                            mushafTranslationFontSize: Math.max(
+                              12,
+                              (settings.mushafTranslationFontSize ?? 16) - 1
+                            ),
+                          })
+                        }
+                        title="Decrease translation font size"
+                        className="p-2 rounded-xl bg-surface-card hover:bg-surface-hover border border-surface-border text-content-secondary hover:text-content-primary transition cursor-pointer"
+                      >
+                        <Minus className="w-3.5 h-3.5" />
+                      </button>
+
+                      <input
+                        type="range"
+                        min={12}
+                        max={26}
+                        step={1}
+                        value={settings.mushafTranslationFontSize ?? 16}
+                        onChange={(e) =>
+                          updateSettings({
+                            mushafTranslationFontSize: parseInt(e.target.value, 10),
+                          })
+                        }
+                        className="flex-1 accent-brand-primary cursor-pointer"
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          updateSettings({
+                            mushafTranslationFontSize: Math.min(
+                              30,
+                              (settings.mushafTranslationFontSize ?? 16) + 1
+                            ),
+                          })
+                        }
+                        title="Increase translation font size"
+                        className="p-2 rounded-xl bg-surface-card hover:bg-surface-hover border border-surface-border text-content-secondary hover:text-content-primary transition cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          updateSettings({ mushafTranslationFontSize: 16 })
+                        }
+                        title="Reset translation font size to default (16px)"
+                        className="px-2 py-1.5 rounded-lg bg-surface-card hover:bg-surface-hover border border-surface-border text-[11px] font-medium text-content-muted hover:text-content-primary cursor-pointer"
+                      >
+                        Default
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 4. Live Interactive Preview Box */}
+              <div className="space-y-2 p-4 rounded-2xl bg-surface-subtle/80 border border-surface-border">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-content-muted uppercase tracking-wider">
+                    Live Mushaf Preview (Surah Al-Fatihah 1:1)
+                  </span>
+                  <span className="text-[11px] font-mono text-brand-primary">
+                    Quran.com/1:01
+                  </span>
+                </div>
+
+                {/* Simulated Arabic Script Box */}
+                <div className="p-4 rounded-2xl bg-surface-card border border-surface-border shadow-xs">
+                  <div
+                    dir="rtl"
+                    lang="ar"
+                    className="quran-arabic-text text-content-primary transition-all text-right"
+                    style={{
+                      fontFamily: getFontFamilyForOption(
+                        settings.mushafArabicFont ??
+                          ((settings.mushafScript ?? "uthmani") === "indopak"
+                            ? "noto-nastaliq"
+                            : "amiri-quran")
+                      ),
+                      fontSize: `${settings.mushafArabicFontSize ?? 28}px`,
+                      lineHeight:
+                        (settings.mushafScript ?? "uthmani") === "indopak"
+                          ? 2.5
+                          : 2.2,
+                    }}
+                  >
+                    {(settings.mushafScript ?? "uthmani") === "indopak"
+                      ? "بِسۡمِ اللهِ الرَّحۡمٰنِ الرَّحِيۡمِ"
+                      : "بِسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ"}
+                    <span className="inline-flex items-center justify-center mx-2 text-brand-primary text-sm font-mono align-middle">
+                      ﴿١﴾
+                    </span>
+                  </div>
+
+                  {/* Simulated Translation */}
+                  <div className="mt-3 pt-3 border-t border-surface-border/60">
+                    <div className="text-[11px] font-bold text-brand-primary mb-1">
+                      {QURAN_TRANSLATIONS.find(
+                        (t) => t.id === (settings.mushafTranslationId ?? 20)
+                      )?.name || "Saheeh International"}:
+                    </div>
+                    <div
+                      className="text-content-secondary leading-relaxed"
+                      style={{
+                        fontSize: `${settings.mushafTranslationFontSize ?? 16}px`,
+                      }}
+                    >
+                      {(settings.mushafTranslationId ?? 20) === 85
+                        ? "In the name of God, the Lord of Mercy, the Giver of Mercy!"
+                        : (settings.mushafTranslationId ?? 20) === 84
+                        ? "In the name of Allah, the Most-Gracious, the Very-Merciful."
+                        : (settings.mushafTranslationId ?? 20) === 19
+                        ? "In the name of Allah, the Beneficent, the Merciful."
+                        : (settings.mushafTranslationId ?? 20) === 22
+                        ? "In the name of Allah, Most Gracious, Most Merciful."
+                        : (settings.mushafTranslationId ?? 20) === 203
+                        ? "In the Name of Allah, the Most Gracious, the Most Merciful."
+                        : (settings.mushafTranslationId ?? 20) === 149
+                        ? "In the name of Allah, the All-Merciful, the Bestower of Mercy."
+                        : (settings.mushafTranslationId ?? 20) === 95
+                        ? "In the name of Allah, the Merciful, the Compassionate."
+                        : "In the name of Allah, the Entirely Merciful, the Especially Merciful."}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

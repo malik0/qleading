@@ -14,6 +14,18 @@ import {
   Radio,
 } from "lucide-react";
 import { SyncPoint } from "../types/quran";
+import { getAyahMarkerForPosition } from "../data/juzMarkers";
+
+function formatJuzName(juzId: number, customName?: string, defaultName?: string): string {
+  const name = (customName || defaultName || "").trim();
+  if (!name || name.toLowerCase() === `juz ${juzId}`.toLowerCase()) {
+    return `Juz ${juzId}`;
+  }
+  if (name.toLowerCase().startsWith(`juz ${juzId}`.toLowerCase())) {
+    return name;
+  }
+  return `Juz ${juzId} (${name})`;
+}
 
 interface RollBackContentProps {
   onRollbackComplete?: () => void;
@@ -54,6 +66,18 @@ export const RollBackContent: React.FC<RollBackContentProps> = ({ onRollbackComp
     timerSeconds: timerSeconds + 15,
   };
 
+  const accidentMarker =
+    targetAccidentState.surahNumber && targetAccidentState.ayahNumber && targetAccidentState.surahName
+      ? {
+          surahNumber: targetAccidentState.surahNumber,
+          ayahNumber: targetAccidentState.ayahNumber,
+          surahName: targetAccidentState.surahName,
+        }
+      : getAyahMarkerForPosition(
+          targetAccidentState.juzId,
+          targetAccidentState.playbackPositionSeconds
+        );
+
   return (
     <div className="space-y-4">
       {/* 1. 15-SECOND ACCIDENT ROLLBACK OPTION (Visible when last synch point is > 1 min earlier) */}
@@ -71,7 +95,7 @@ export const RollBackContent: React.FC<RollBackContentProps> = ({ onRollbackComp
 
           <p className="text-content-secondary text-[11px] leading-relaxed">
             The last recorded synch point was saved more than 1 minute ago. You can roll back directly to{" "}
-            <strong>15 seconds before the accident</strong> to restore your Big Timer and audio position without losing your recent listening progress.
+            <strong>15 seconds before the accident</strong> to restore your Big Timer and reading position without losing your recent listening progress.
           </p>
 
           {/* Accident State Summary */}
@@ -82,11 +106,21 @@ export const RollBackContent: React.FC<RollBackContentProps> = ({ onRollbackComp
                 {lastAccident?.description || "Recent Action / Scrubber Jump"}
               </span>
             </div>
-            <div className="flex items-center justify-between text-[11px]">
-              <span className="text-content-muted">Restores Audiofile To:</span>
-              <span className="font-semibold font-mono text-brand-primary">
-                Juz {targetAccidentState.juzId}: {targetAccidentState.juzName} at{" "}
-                {formatAudioTime(targetAccidentState.playbackPositionSeconds)}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between text-[11px] gap-1">
+              <span className="text-content-muted shrink-0">Restores Position To:</span>
+              <span className="font-semibold text-brand-primary flex flex-wrap items-center sm:justify-end gap-1.5">
+                <span>{formatJuzName(targetAccidentState.juzId, targetAccidentState.juzName)}</span>
+                {accidentMarker && (
+                  <>
+                    <span className="text-content-muted font-normal">•</span>
+                    <span>
+                      Surah {accidentMarker.surahNumber} ({accidentMarker.surahName}), Verse {accidentMarker.ayahNumber}
+                    </span>
+                  </>
+                )}
+                <span className="font-mono text-content-secondary font-normal">
+                  at {formatAudioTime(targetAccidentState.playbackPositionSeconds)}
+                </span>
               </span>
             </div>
             <div className="flex items-center justify-between text-[11px]">
@@ -136,56 +170,74 @@ export const RollBackContent: React.FC<RollBackContentProps> = ({ onRollbackComp
             </p>
           </div>
         ) : (
-          syncPoints.map((sp, idx) => (
-            <div
-              key={sp.id || idx}
-              className="p-3.5 rounded-2xl bg-surface-subtle hover:bg-surface-hover border border-surface-border transition flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm group"
-            >
-              <div className="space-y-1 min-w-0 flex-1">
-                {/* Badge and Timestamps */}
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-brand-primary/10 text-brand-primary border border-brand-primary/20">
-                    {sp.label || "Synch Point"}
-                  </span>
-                  <span className="text-xs font-mono font-medium text-content-primary">
-                    {formatDateTime(sp.timestamp)}
-                  </span>
-                  <span className="text-[10px] text-content-muted">
-                    ({formatRelativeTime(sp.timestamp)})
-                  </span>
-                </div>
+          syncPoints.map((sp, idx) => {
+            const spMarker =
+              sp.surahNumber && sp.ayahNumber && sp.surahName
+                ? { surahNumber: sp.surahNumber, ayahNumber: sp.ayahNumber, surahName: sp.surahName }
+                : getAyahMarkerForPosition(sp.juzId, sp.playbackPositionSeconds);
 
-                {/* Values: Audiofile and Big Timer */}
-                <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 text-xs text-content-secondary pt-0.5">
-                  <div className="flex items-center gap-1">
-                    <span className="text-content-muted text-[11px]">Audiofile:</span>
-                    <span className="font-semibold text-content-primary truncate">
-                      Juz {sp.juzId}: {sp.juzName} ({formatAudioTime(sp.playbackPositionSeconds)}
-                      {sp.audioDurationSeconds ? ` / ${formatAudioTime(sp.audioDurationSeconds)}` : ""})
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-1">
-                    <span className="text-content-muted text-[11px]">Big Timer:</span>
-                    <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                      {formatHeroTimer(sp.timerSeconds)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Roll Back action button */}
-              <button
-                type="button"
-                onClick={() => handleRollbackPoint(sp)}
-                title="Roll back to this synch point"
-                className="shrink-0 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface-card hover:bg-brand-primary hover:text-white border border-surface-border hover:border-brand-primary text-xs font-semibold text-content-secondary transition shadow-sm active:scale-95 group-hover:border-brand-primary/40"
+            return (
+              <div
+                key={sp.id || idx}
+                className="p-3.5 rounded-2xl bg-surface-subtle hover:bg-surface-hover border border-surface-border transition flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm group"
               >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>Roll Back</span>
-              </button>
-            </div>
-          ))
+                <div className="space-y-1 min-w-0 flex-1">
+                  {/* Badge and Timestamps */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-brand-primary/10 text-brand-primary border border-brand-primary/20">
+                      {sp.label || "Synch Point"}
+                    </span>
+                    <span className="text-xs font-mono font-medium text-content-primary">
+                      {formatDateTime(sp.timestamp)}
+                    </span>
+                    <span className="text-[10px] text-content-muted">
+                      ({formatRelativeTime(sp.timestamp)})
+                    </span>
+                  </div>
+
+                  {/* Values: Position and Big Timer */}
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 text-xs text-content-secondary pt-0.5">
+                    <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                      <span className="text-content-muted text-[11px] shrink-0">Position:</span>
+                      <span className="font-semibold text-content-primary">
+                        {formatJuzName(sp.juzId, sp.juzName)}
+                      </span>
+                      {spMarker && (
+                        <>
+                          <span className="text-content-muted font-normal">•</span>
+                          <span className="font-semibold text-brand-primary">
+                            Surah {spMarker.surahNumber} ({spMarker.surahName}), Verse {spMarker.ayahNumber}
+                          </span>
+                        </>
+                      )}
+                      <span className="text-content-muted font-mono text-[11px]">
+                        ({formatAudioTime(sp.playbackPositionSeconds)}
+                        {sp.audioDurationSeconds ? ` / ${formatAudioTime(sp.audioDurationSeconds)}` : ""})
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1 shrink-0">
+                      <span className="text-content-muted text-[11px]">Big Timer:</span>
+                      <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                        {formatHeroTimer(sp.timerSeconds)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Roll Back action button */}
+                <button
+                  type="button"
+                  onClick={() => handleRollbackPoint(sp)}
+                  title="Roll back to this synch point"
+                  className="shrink-0 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface-card hover:bg-brand-primary hover:text-white border border-surface-border hover:border-brand-primary text-xs font-semibold text-content-secondary transition shadow-sm active:scale-95 group-hover:border-brand-primary/40"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Roll Back</span>
+                </button>
+              </div>
+            );
+          })
         )}
       </div>
     </div>

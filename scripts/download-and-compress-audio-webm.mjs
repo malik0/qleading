@@ -74,7 +74,7 @@ async function processJuz(juzNum) {
 }
 
 async function main() {
-  console.log("Downloading remaining Juzs for Sheikh Maher Al Muaiqly...");
+  console.log("Downloading remaining Juzs for Sheikh Saud Al-Shuraim...");
   
   const missing = [22, 26];
   for (const juzNum of missing) {

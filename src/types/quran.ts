@@ -21,7 +21,7 @@ export interface JuzInfo {
   approxDurationSeconds: number;
 }
 
-export type PlaybackSpeed = 0.5 | 1.0 | 1.25 | 1.5 | 1.75 | 2.0;
+export type PlaybackSpeed = 0.5 | 0.75 | 1.0 | 1.25 | 1.5 | 1.75 | 2.0;
 export type TimerMode = 'countdown' | 'countup';
 export type DayOfWeek = 0 | 1 | 2 | 3 | 4 | 5 | 6; // 0 = Sunday, 1 = Monday, etc.
 export type ThemeMode = 'dark' | 'light' | 'system';
@@ -39,6 +39,16 @@ export type ThemeColor =
   | 'coral'
   | 'slate';
 
+export type MushafScript = 'uthmani' | 'indopak';
+export type MushafArabicFont = 'amiri-quran' | 'noto-nastaliq' | 'scheherazade' | 'noto-naskh' | 'amiri';
+
+export interface QuranTranslationOption {
+  id: number;
+  name: string;
+  author: string;
+  shortLabel: string;
+}
+
 export interface AppSettings {
   rewindStepSeconds: number;
   forwardStepSeconds: number;
@@ -55,6 +65,13 @@ export interface AppSettings {
   customJuzRanges: Record<number, string>;
   khatmPlan?: KhatmPlan | null;
   enableBackToTop?: boolean;
+
+  // Mushaf & Ayah Display Settings
+  mushafScript?: MushafScript;
+  mushafArabicFont?: MushafArabicFont;
+  mushafTranslationId?: number;
+  mushafArabicFontSize?: number;
+  mushafTranslationFontSize?: number;
 }
 
 export interface KhatmPlan {
@@ -96,11 +113,14 @@ export interface SyncPoint {
   timestamp: string; // ISO string
   juzId: number;
   juzName: string;
-  playbackPositionSeconds: number; // audiofile position in seconds
+  playbackPositionSeconds: number; // playback position in seconds
   audioDurationSeconds?: number;
   timerSeconds: number; // Big Timer value in seconds
   timerTargetMinutes?: number;
   label?: string; // e.g. "Manual Sync", "Auto Sync", "Pre-Play Sync", "Checkpoint", "Pause"
+  surahNumber?: number;
+  ayahNumber?: number;
+  surahName?: string;
 }
 
 export interface AccidentRecord {
@@ -112,12 +132,18 @@ export interface AccidentRecord {
     juzName: string;
     playbackPositionSeconds: number;
     timerSeconds: number;
+    surahNumber?: number;
+    ayahNumber?: number;
+    surahName?: string;
   };
   fifteenSecBeforeState: {
     juzId: number;
     juzName: string;
     playbackPositionSeconds: number;
     timerSeconds: number;
+    surahNumber?: number;
+    ayahNumber?: number;
+    surahName?: string;
   };
 }
 

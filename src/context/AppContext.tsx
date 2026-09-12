@@ -27,7 +27,7 @@ import {
   UserState,
 } from "../types/quran";
 import { INITIAL_JUZ_LIST } from "../data/juzList";
-import { JUZ_MARKERS } from "../data/juzMarkers";
+import { JUZ_MARKERS, getAyahMarkerForPosition } from "../data/juzMarkers";
 import {
   DEFAULT_SETTINGS,
   INITIAL_USER_STATE,
@@ -41,6 +41,7 @@ import {
   getDeviceId,
 } from "../lib/storage";
 import { getLocalDateString, getSlotIndexForDate, formatHeroTimer } from "../lib/utils";
+import { getBestAudioFormat, isTVBrowser, canPlayWebmOpus } from "../lib/audioSupport";
 
 function isSameAudioUrl(src1?: string | null, src2?: string | null): boolean {
   if (!src1 || !src2) return false;
@@ -264,9 +265,9 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
       (window.location.hostname === "localhost" ||
         window.location.hostname === "127.0.0.1");
 
-    // In production on the web, local files cannot be served due to Worker asset size limits.
-    // Ensure preferLocalAudio is false on remote domains.
-    if (!isLocal && loadedSettings.preferLocalAudio) {
+    // Smart TV browsers and platforms lacking WebM Opus support require MP3.
+    // Also disable preferLocalAudio on remote domains.
+    if ((!isLocal || isTVBrowser() || !canPlayWebmOpus()) && loadedSettings.preferLocalAudio) {
       loadedSettings.preferLocalAudio = false;
       saveStoredSettings(loadedSettings);
     }
@@ -275,21 +276,28 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
     if (loadedSettings.defaultPlaybackSpeed) {
       setPlaybackSpeedState(loadedSettings.defaultPlaybackSpeed);
       if (audioRef.current) {
-        audioRef.current.playbackRate = loadedSettings.defaultPlaybackSpeed;
+        try {
+          audioRef.current.playbackRate = loadedSettings.defaultPlaybackSpeed;
+        } catch {}
       }
     }
     if (!loadedState.syncPoints || loadedState.syncPoints.length === 0) {
       const initJuz = INITIAL_JUZ_LIST.find((j) => j.id === (loadedState.currentJuzId || 1)) || INITIAL_JUZ_LIST[0];
+      const initPos = loadedState.playbackPositionSeconds || 0;
+      const initMarker = getAyahMarkerForPosition(loadedState.currentJuzId || 1, initPos);
       const initialPoint: SyncPoint = {
         id: "sp_init_" + Date.now(),
         timestamp: new Date().toISOString(),
         juzId: loadedState.currentJuzId || 1,
         juzName: initJuz.customName || initJuz.defaultName,
-        playbackPositionSeconds: loadedState.playbackPositionSeconds || 0,
+        playbackPositionSeconds: initPos,
         audioDurationSeconds: initJuz.approxDurationSeconds || 3300,
         timerSeconds: loadedState.timerSeconds || 1800,
         timerTargetMinutes: loadedSettings.timerTargetMinutes || 30,
         label: "Initial Session",
+        surahNumber: initMarker?.surahNumber,
+        ayahNumber: initMarker?.ayahNumber,
+        surahName: initMarker?.surahName,
       };
       loadedState.syncPoints = [initialPoint];
       saveStoredState(loadedState);
@@ -405,11 +413,12 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
   const juzName = currentJuz.customName || currentJuz.defaultName;
   const juzRange = currentJuz.customRange || currentJuz.defaultRange;
   // Determine active audio URL:
-  // Uses WebM files if preferLocalAudio is enabled and file has not failed,
-  // otherwise uses MP3 fallback audio URL.
+  // Uses WebM files if preferLocalAudio is enabled, WebM is supported by the device (non-TV),
+  // and file has not failed, otherwise uses universal MP3 stream.
   const getAudioUrlForJuz = useCallback(
     (juz: JuzInfo): string => {
-      if (settings.preferLocalAudio && !failedLocalJuzs[juz.id]) {
+      const bestFormat = getBestAudioFormat(settings.preferLocalAudio);
+      if (bestFormat === "webm" && !failedLocalJuzs[juz.id]) {
         return juz.localAudioUrl;
       }
       return juz.cdnAudioUrl;
@@ -431,6 +440,12 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
       const spd = playbackSpeedRef.current || playbackSpeed || 1.0;
       audioRef.current.playbackRate = spd;
       audioRef.current.defaultPlaybackRate = spd;
+      audioRef.current.load();
+      try {
+        const spd = playbackSpeedRef.current || playbackSpeed || 1.0;
+        audioRef.current.playbackRate = spd;
+        audioRef.current.defaultPlaybackRate = spd;
+      } catch {}
       if (wasPlaying) {
         audioRef.current.play().catch((err) => {
           if (err.name === "AbortError") return;
@@ -644,6 +659,9 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
         }
       }
 
+      const beforeMarker = getAyahMarkerForPosition(currentJuzId, curPos);
+      const fifteenMarker = getAyahMarkerForPosition(fifteenState.juzId, fifteenState.playbackPositionSeconds);
+
       const record: AccidentRecord = {
         timestamp: now,
         actionType: type,
@@ -653,8 +671,16 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
           juzName: curName,
           playbackPositionSeconds: curPos,
           timerSeconds: curTimer,
+          surahNumber: beforeMarker?.surahNumber,
+          ayahNumber: beforeMarker?.ayahNumber,
+          surahName: beforeMarker?.surahName,
         },
-        fifteenSecBeforeState: fifteenState,
+        fifteenSecBeforeState: {
+          ...fifteenState,
+          surahNumber: fifteenMarker?.surahNumber,
+          ayahNumber: fifteenMarker?.ayahNumber,
+          surahName: fifteenMarker?.surahName,
+        },
       };
       setLastAccident(record);
     },
@@ -671,6 +697,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
       const pos = playbackPosRef.current;
       const timer = timerSecondsRef.current;
       const dur = audioRef.current?.duration || curJuz.approxDurationSeconds || 3300;
+      const marker = getAyahMarkerForPosition(curJuzId, Math.floor(pos));
 
       const newPoint: SyncPoint = {
         id: "sp_" + Date.now() + "_" + Math.random().toString(36).substring(2, 7),
@@ -682,6 +709,9 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
         timerSeconds: timer,
         timerTargetMinutes: settingsRef.current.timerTargetMinutes,
         label,
+        surahNumber: marker?.surahNumber,
+        ayahNumber: marker?.ayahNumber,
+        surahName: marker?.surahName,
       };
 
       updateStateAndPersist((prev) => {
@@ -718,6 +748,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
       if (targetJuzId !== userStateRef.current.currentJuzId) {
         if (audioRef.current && !isSameAudioUrl(audioRef.current.src, targetUrl)) {
           audioRef.current.src = targetUrl;
+          audioRef.current.load();
         }
       }
 
@@ -766,6 +797,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
     if (targetState.juzId !== userStateRef.current.currentJuzId) {
       if (audioRef.current && !isSameAudioUrl(audioRef.current.src, targetUrl)) {
         audioRef.current.src = targetUrl;
+        audioRef.current.load();
       }
     }
 
@@ -844,6 +876,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
             const targetUrl = getAudioUrlForJuz(targetJuz);
             if (!isSameAudioUrl(audioRef.current.src, targetUrl)) {
               audioRef.current.src = targetUrl;
+              audioRef.current.load();
             }
             audioRef.current.currentTime = data.position || 0;
           }
@@ -905,6 +938,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
               const targetUrl = getAudioUrlForJuz(targetJuz);
               if (audioRef.current && !isSameAudioUrl(audioRef.current.src, targetUrl)) {
                 audioRef.current.src = targetUrl;
+                audioRef.current.load();
               }
             }
 
@@ -928,6 +962,9 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
             saveStoredSettings(reconciledSettings);
             if (reconciledSettings.defaultPlaybackSpeed && audioRef.current) {
               audioRef.current.playbackRate = reconciledSettings.defaultPlaybackSpeed;
+              try {
+                audioRef.current.playbackRate = reconciledSettings.defaultPlaybackSpeed;
+              } catch {}
             }
           }
 
@@ -1213,28 +1250,64 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
     return () => window.removeEventListener("visibilitychange", handleVisibilityChange);
   }, [syncWithServer]);
 
-  // Audio Playback Controls with Pre-Play Sync
-  const play = useCallback(async () => {
-    if (!audioRef.current) return;
+  // Audio Playback Controls with TV Autoplay Resilience and Concurrent Pre-Play Sync
+  const play = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
 
-    // Requirement: When play button is pressed a sync must be done first!
+    // 1. Ensure audio element is unmuted and volume is at maximum
+    audio.muted = false;
+    audio.volume = 1.0;
+
+    // 2. Safely apply playback rate without throwing on TVs lacking variable rate support
+    try {
+      const spd = playbackSpeedRef.current || playbackSpeed || 1.0;
+      audio.playbackRate = spd;
+      audio.defaultPlaybackRate = spd;
+    } catch {}
+
+    // 3. SYNCHRONOUSLY initiate play() inside the user gesture.
+    // Calling audio.play() synchronously is MANDATORY on Smart TV browsers (Tizen, webOS)
+    // and mobile WebKit so the transient user gesture token is not revoked by async network fetch.
+    const playPromise = audio.play();
+    if (playPromise !== undefined) {
+      playPromise
+        .then(() => {
+          setIsPlaying(true);
+          isPlayingRef.current = true;
+          setSyncNotice(null);
+          broadcastPlayback("PLAY");
+          saveSyncPoint("Playback Start");
+        })
+        .catch((err) => {
+          if (err.name === "AbortError") return;
+          console.warn("Playback failed:", err);
+          setIsPlaying(false);
+          isPlayingRef.current = false;
+          if (err.name === "NotAllowedError") {
+            setSyncNotice("Audio blocked by browser. Press Play to listen.");
+            setTimeout(() => setSyncNotice(null), 6000);
+          }
+        });
+    }
+
+    // 4. Concurrently synchronize with Cloudflare server in background if logged in
     if (userStateRef.current.isLoggedIn) {
       setIsSyncing(true);
-      try {
-        const currentState = userStateRef.current;
-        const res = await fetch("/api/sync", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            state: currentState,
-            settings: settingsRef.current,
-            deviceId: getDeviceId(),
-            isPlaying: true,
-            isStartingPlayback: true,
-          }),
-        });
-
-        if (res.ok) {
+      const currentState = userStateRef.current;
+      fetch("/api/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          state: currentState,
+          settings: settingsRef.current,
+          deviceId: getDeviceId(),
+          isPlaying: true,
+          isStartingPlayback: true,
+        }),
+      })
+        .then(async (res) => {
+          if (!res.ok) return;
           const data = await res.json();
           if (data.remoteState) {
             const targetPos = data.remoteState.playbackPositionSeconds || 0;
@@ -1275,7 +1348,14 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
               const targetUrl = getAudioUrlForJuz(targetJuz);
               if (audioRef.current && !isSameAudioUrl(audioRef.current.src, targetUrl)) {
                 audioRef.current.src = targetUrl;
+                audioRef.current.load();
+                audioRef.current.currentTime = targetPos;
+                if (isPlayingRef.current) {
+                  audioRef.current.play().catch(() => {});
+                }
               }
+            } else if (audioRef.current && Math.abs(audioRef.current.currentTime - targetPos) > 3) {
+              audioRef.current.currentTime = targetPos;
             }
 
             if (audioRef.current) {
@@ -1295,34 +1375,20 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
             settingsRef.current = reconciledSettings;
             saveStoredSettings(reconciledSettings);
             if (reconciledSettings.defaultPlaybackSpeed && audioRef.current) {
-              audioRef.current.playbackRate = reconciledSettings.defaultPlaybackSpeed;
+              try {
+                audioRef.current.playbackRate = reconciledSettings.defaultPlaybackSpeed;
+              } catch {}
             }
           }
-        }
-      } catch (err) {
-        console.warn("Pre-play sync offline/failed, continuing locally:", err);
-      } finally {
-        setIsSyncing(false);
-      }
+        })
+        .catch((err) => {
+          console.warn("Pre-play sync offline/failed, continuing locally:", err);
+        })
+        .finally(() => {
+          setIsSyncing(false);
+        });
     }
-
-    try {
-      if (playbackSpeedRef.current && audioRef.current) {
-        audioRef.current.playbackRate = playbackSpeedRef.current;
-        audioRef.current.defaultPlaybackRate = playbackSpeedRef.current;
-      }
-      await audioRef.current.play();
-      setIsPlaying(true);
-      isPlayingRef.current = true;
-      setSyncNotice(null);
-      broadcastPlayback("PLAY");
-      saveSyncPoint("Playback Start");
-    } catch (e) {
-      console.warn("Playback error:", e);
-      setIsPlaying(false);
-      isPlayingRef.current = false;
-    }
-  }, [broadcastPlayback, getAudioUrlForJuz, saveSyncPoint]);
+  }, [broadcastPlayback, getAudioUrlForJuz, saveSyncPoint, playbackSpeed]);
 
   const pause = useCallback(() => {
     if (audioRef.current) {
@@ -1527,6 +1593,14 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
         audioRef.current.currentTime = 0;
         audioRef.current.playbackRate = activePlaybackSpeed;
         audioRef.current.defaultPlaybackRate = activePlaybackSpeed;
+        audioRef.current.load();
+        try {
+          audioRef.current.currentTime = 0;
+        } catch {}
+        try {
+          audioRef.current.playbackRate = activePlaybackSpeed;
+          audioRef.current.defaultPlaybackRate = activePlaybackSpeed;
+        } catch {}
         const playPromise = audioRef.current.play();
         if (playPromise !== undefined) {
           playPromise
@@ -1949,6 +2023,15 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
       const activeSpd = playbackSpeedRef.current || playbackSpeed || 1.0;
       audioRef.current.playbackRate = activeSpd;
       audioRef.current.defaultPlaybackRate = activeSpd;
+      audioRef.current.load();
+      try {
+        audioRef.current.currentTime = 0;
+      } catch {}
+      try {
+        const activeSpd = playbackSpeedRef.current || playbackSpeed || 1.0;
+        audioRef.current.playbackRate = activeSpd;
+        audioRef.current.defaultPlaybackRate = activeSpd;
+      } catch {}
       const playPromise = audioRef.current.play();
       if (playPromise !== undefined) {
         playPromise
@@ -2358,32 +2441,153 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
   }, [updateStateAndPersist, syncWithServer]);
 
   // MediaSession API Integration (Lock Screen, Notification, Headphone buttons)
+  // Safe MediaSession position state updater
+  const updatePositionState = useCallback(() => {
+    if (typeof window === "undefined" || !("mediaSession" in navigator)) return;
+    if (!("setPositionState" in navigator.mediaSession)) return;
+    const audio = audioRef.current;
+    if (!audio) return;
+    const dur = audio.duration;
+    if (dur && !isNaN(dur) && isFinite(dur) && dur > 0) {
+      try {
+        navigator.mediaSession.setPositionState({
+          duration: dur,
+          playbackRate: audio.playbackRate || 1.0,
+          position: Math.min(Math.max(0, audio.currentTime), dur),
+        });
+      } catch {
+        // Silently ignore if position is temporarily out of range
+      }
+    }
+  }, []);
+
+  // Synchronize mediaSession.playbackState to avoid lock screen icon and equalizer waveform flickering
   useEffect(() => {
     if (typeof window !== "undefined" && "mediaSession" in navigator) {
+      navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
+      updatePositionState();
+    }
+  }, [isPlaying, updatePositionState]);
+
+  // MediaSession Metadata Synchronization (Lock Screen, Notification, Headphone buttons, Dynamic Island)
+  useEffect(() => {
+    if (typeof window === "undefined" || !("mediaSession" in navigator)) return;
+
+    const artistName = "Saud Al-Shuraim";
+    const albumName = "The Holy Quran - 30 Juzs";
+    const origin = window.location.origin || "";
+
+    const mediaTitle = currentMarker
+      ? `${juzName} • ${currentMarker.surahName} (Verse ${currentMarker.ayahNumber})`
+      : juzName;
+
+    if (navigator.mediaSession.metadata) {
+      // In-place property mutation preserves the decoded artwork cache on iOS and prevents artwork icon flickering
+      if (navigator.mediaSession.metadata.title !== mediaTitle) {
+        navigator.mediaSession.metadata.title = mediaTitle;
+      }
+      if (navigator.mediaSession.metadata.artist !== artistName) {
+        navigator.mediaSession.metadata.artist = artistName;
+      }
+      if (navigator.mediaSession.metadata.album !== albumName) {
+        navigator.mediaSession.metadata.album = albumName;
+      }
+    } else {
+      // Fully-qualified absolute URLs are required by iOS Safari MediaPlayer system daemon
       navigator.mediaSession.metadata = new MediaMetadata({
-        title: juzName,
-        artist: "Maher Al Muaiqly",
-        album: "The Holy Quran - 30 Juzs",
+        title: mediaTitle,
+        artist: artistName,
+        album: albumName,
         artwork: [
-          { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
-          { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+          { src: `${origin}/icons/icon-192.png`, sizes: "96x96", type: "image/png" },
+          { src: `${origin}/icons/icon-192.png`, sizes: "128x128", type: "image/png" },
+          { src: `${origin}/icons/icon-192.png`, sizes: "192x192", type: "image/png" },
+          { src: `${origin}/icons/icon-512.png`, sizes: "256x256", type: "image/png" },
+          { src: `${origin}/icons/icon-512.png`, sizes: "384x384", type: "image/png" },
+          { src: `${origin}/icons/icon-512.png`, sizes: "512x512", type: "image/png" },
         ],
       });
-
-      navigator.mediaSession.setActionHandler("play", play);
-      navigator.mediaSession.setActionHandler("pause", pause);
-      navigator.mediaSession.setActionHandler("seekbackward", rewind);
-      navigator.mediaSession.setActionHandler("seekforward", fastForward);
-      navigator.mediaSession.setActionHandler("previoustrack", () => {
-        const prevId = currentJuz.id > 1 ? currentJuz.id - 1 : 30;
-        confirmJuzSwitch(prevId);
-      });
-      navigator.mediaSession.setActionHandler("nexttrack", () => {
-        const nextId = currentJuz.id < 30 ? currentJuz.id + 1 : 1;
-        confirmJuzSwitch(nextId);
-      });
     }
-  }, [juzName, currentJuz.id, play, pause, rewind, fastForward, confirmJuzSwitch]);
+  }, [juzName, currentMarker]);
+
+  // Stable mediaSession action handlers registered ONCE on mount to prevent MPRemoteCommandCenter rebuild flicker
+  const mediaSessionHandlersRef = useRef({
+    play,
+    pause,
+    rewind,
+    fastForward,
+    seekTo,
+    confirmJuzSwitch,
+    currentJuzId: currentJuz.id,
+  });
+
+  useEffect(() => {
+    mediaSessionHandlersRef.current = {
+      play,
+      pause,
+      rewind,
+      fastForward,
+      seekTo,
+      confirmJuzSwitch,
+      currentJuzId: currentJuz.id,
+    };
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !("mediaSession" in navigator)) return;
+
+    const setHandler = (
+      action: MediaSessionAction,
+      handler: MediaSessionActionHandler | null
+    ) => {
+      try {
+        navigator.mediaSession.setActionHandler(action, handler);
+      } catch {
+        // Safe ignore for browser-specific unsupported action types
+      }
+    };
+
+    setHandler("play", () => {
+      mediaSessionHandlersRef.current.play();
+    });
+    setHandler("pause", () => {
+      mediaSessionHandlersRef.current.pause();
+    });
+    setHandler("seekbackward", (details) => {
+      mediaSessionHandlersRef.current.rewind();
+    });
+    setHandler("seekforward", (details) => {
+      mediaSessionHandlersRef.current.fastForward();
+    });
+    setHandler("seekto", (details) => {
+      if (details.seekTime !== undefined && !isNaN(details.seekTime)) {
+        mediaSessionHandlersRef.current.seekTo(details.seekTime);
+      }
+    });
+    setHandler("previoustrack", () => {
+      const curId = mediaSessionHandlersRef.current.currentJuzId;
+      const prevId = curId > 1 ? curId - 1 : 30;
+      mediaSessionHandlersRef.current.confirmJuzSwitch(prevId);
+    });
+    setHandler("nexttrack", () => {
+      const curId = mediaSessionHandlersRef.current.currentJuzId;
+      const nextId = curId < 30 ? curId + 1 : 1;
+      mediaSessionHandlersRef.current.confirmJuzSwitch(nextId);
+    });
+
+    return () => {
+      const actions: MediaSessionAction[] = [
+        "play",
+        "pause",
+        "seekbackward",
+        "seekforward",
+        "seekto",
+        "previoustrack",
+        "nexttrack",
+      ];
+      actions.forEach((a) => setHandler(a, null));
+    };
+  }, []);
 
   // User Auth Actions
   const generateRandomUser = useCallback(async () => {
@@ -2472,6 +2676,9 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
           saveStoredSettings(mergedSettings);
           if (mergedSettings.defaultPlaybackSpeed && audioRef.current) {
             audioRef.current.playbackRate = mergedSettings.defaultPlaybackSpeed;
+            try {
+              audioRef.current.playbackRate = mergedSettings.defaultPlaybackSpeed;
+            } catch {}
           }
         }
 
@@ -2480,6 +2687,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
           const targetUrl = getAudioUrlForJuz(targetJuz);
           if (!isSameAudioUrl(audioRef.current.src, targetUrl)) {
             audioRef.current.src = targetUrl;
+            audioRef.current.load();
           }
           audioRef.current.currentTime = merged.playbackPositionSeconds || 0;
         }
@@ -2578,6 +2786,65 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
     completedJuzIds: [],
   };
 
+  // TV Remote Control & Global Keyboard Navigation Handler
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't intercept when user is typing in form controls
+      const activeEl = document.activeElement;
+      const tag = activeEl?.tagName?.toLowerCase();
+      if (
+        tag === "input" ||
+        tag === "textarea" ||
+        tag === "select" ||
+        activeEl?.getAttribute("contenteditable") === "true"
+      ) {
+        return;
+      }
+
+      const key = e.key;
+      const keyCode = e.keyCode;
+
+      // Play / Pause toggle keys (TV remotes and keyboards)
+      if (
+        key === "MediaPlayPause" ||
+        key === "Play" ||
+        key === "Pause" ||
+        key === "MediaPlay" ||
+        key === "MediaPause" ||
+        keyCode === 179 || // MediaPlayPause
+        keyCode === 415 || // MediaPlay
+        keyCode === 19 ||  // MediaPause
+        keyCode === 250 || // MediaPlay (LG webOS / Tizen)
+        keyCode === 251 || // MediaPause (LG webOS / Tizen)
+        (key === " " && tag !== "button") // Spacebar toggles playback unless focused on another button
+      ) {
+        e.preventDefault();
+        togglePlay();
+      } else if (key === "MediaTrackNext" || keyCode === 176 || keyCode === 425) {
+        e.preventDefault();
+        const curId = userStateRef.current.currentJuzId || 1;
+        const nextId = curId < 30 ? curId + 1 : 1;
+        confirmJuzSwitch(nextId);
+      } else if (key === "MediaTrackPrevious" || keyCode === 177 || keyCode === 424) {
+        e.preventDefault();
+        const curId = userStateRef.current.currentJuzId || 1;
+        const prevId = curId > 1 ? curId - 1 : 30;
+        confirmJuzSwitch(prevId);
+      } else if (key === "MediaFastForward" || keyCode === 228 || keyCode === 417) {
+        e.preventDefault();
+        fastForward();
+      } else if (key === "MediaRewind" || keyCode === 227 || keyCode === 412) {
+        e.preventDefault();
+        rewind();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [togglePlay, confirmJuzSwitch, fastForward, rewind]);
+
   return (
     <AppContext.Provider
       value={{
@@ -2665,12 +2932,26 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
         closeRollBack,
       }}
     >
-      {/* Underlying Audio Element with CDN Fallback Error Handling */}
-      {/* Note: src is managed via the audio sync useEffect & imperative controls rather than a JSX attribute */}
-      {/* to prevent React virtual DOM re-renders from re-assigning .src and aborting active playback. */}
+      {/* Underlying Audio Element with Universal MP3 Fallback and TV Autoplay Resilience */}
       <audio
         ref={audioRef}
-        preload="metadata"
+        src={activeAudioUrl}
+        preload="auto"
+        playsInline
+        onPlay={() => {
+          setIsPlaying(true);
+          isPlayingRef.current = true;
+          if (typeof window !== "undefined" && "mediaSession" in navigator) {
+            navigator.mediaSession.playbackState = "playing";
+          }
+          updatePositionState();
+        }}
+        onPlaying={() => {
+          if (typeof window !== "undefined" && "mediaSession" in navigator) {
+            navigator.mediaSession.playbackState = "playing";
+          }
+          updatePositionState();
+        }}
         onTimeUpdate={(e) => {
           const ct = e.currentTarget.currentTime;
           const dur = e.currentTarget.duration;
@@ -2689,19 +2970,25 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
             setDuration(d);
             durationRef.current = d;
           }
-          if (playbackSpeed) {
-            e.currentTarget.playbackRate = playbackSpeed;
-          }
-          const activeSpd = playbackSpeedRef.current || playbackSpeed || 1.0;
-          e.currentTarget.playbackRate = activeSpd;
-          e.currentTarget.defaultPlaybackRate = activeSpd;
+          try {
+            const activeSpd = playbackSpeedRef.current || playbackSpeed || 1.0;
+            e.currentTarget.playbackRate = activeSpd;
+            e.currentTarget.defaultPlaybackRate = activeSpd;
+          } catch {}
           // Restore position if restoring progress (> 0)
           const targetPos = playbackPosRef.current;
           if (targetPos > 0 && Math.abs(e.currentTarget.currentTime - targetPos) > 1) {
-            e.currentTarget.currentTime = targetPos;
+            try {
+              e.currentTarget.currentTime = targetPos;
+            } catch {}
           }
+          updatePositionState();
         }}
         onPause={(e) => {
+          if (typeof window !== "undefined" && "mediaSession" in navigator) {
+            navigator.mediaSession.playbackState = "paused";
+          }
+          updatePositionState();
           if (isPlayingRef.current && !isTransitioningRef.current) {
             setIsPlaying(false);
             isPlayingRef.current = false;
@@ -2711,12 +2998,31 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
             saveSyncPoint("Audio Stopped");
           }
         }}
+        onRateChange={() => {
+          updatePositionState();
+        }}
+        onSeeked={() => {
+          updatePositionState();
+        }}
         onEnded={handleAudioEnded}
         onError={(e) => {
-          console.warn("Audio source load error, falling back to CDN stream:", e);
-          console.warn("Audio source load error, falling back to MP3 stream:", e);
-          if (settings.preferLocalAudio && !failedLocalJuzs[currentJuz.id]) {
+          const audio = audioRef.current;
+          const currentSrc = audio?.src || "";
+          console.warn("Audio source load error for", currentSrc, e);
+
+          // If failed on WebM or local source, immediately switch to universal MP3 stream and reload
+          if (currentSrc.endsWith(".webm") || (settings.preferLocalAudio && !failedLocalJuzs[currentJuz.id])) {
             setFailedLocalJuzs((prev) => ({ ...prev, [currentJuz.id]: true }));
+            if (audio) {
+              const mp3Url = currentJuz.cdnAudioUrl;
+              if (!isSameAudioUrl(audio.src, mp3Url)) {
+                audio.src = mp3Url;
+                audio.load();
+                if (isPlayingRef.current) {
+                  audio.play().catch((err) => console.warn("Fallback play error:", err));
+                }
+              }
+            }
           }
         }}
       />

@@ -35,6 +35,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
   customJuzRanges: {},
   khatmPlan: null,
   enableBackToTop: true,
+  mushafScript: "uthmani",
+  mushafArabicFont: "amiri-quran",
+  mushafTranslationId: 20,
+  mushafArabicFontSize: 28,
+  mushafTranslationFontSize: 16,
 };
 
 export const INITIAL_USER_STATE: UserState = {

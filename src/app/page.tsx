@@ -19,9 +19,24 @@ export default function Home() {
   const [mounted, setMounted] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [settingsInitialTab, setSettingsInitialTab] = useState<
+    "themes" | "general" | "mushaf" | "progress" | "juz" | "media"
+  >("themes");
 
   useEffect(() => {
     setMounted(true);
+
+    const handleOpenSettings = (e: Event) => {
+      const customEvent = e as CustomEvent<{
+        tab?: "themes" | "general" | "mushaf" | "progress" | "juz" | "media";
+      }>;
+      if (customEvent.detail?.tab) {
+        setSettingsInitialTab(customEvent.detail.tab);
+      }
+      setIsSettingsOpen(true);
+    };
+    window.addEventListener("open-settings", handleOpenSettings);
+    return () => window.removeEventListener("open-settings", handleOpenSettings);
   }, []);
 
   const {
@@ -90,6 +105,7 @@ export default function Home() {
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
+        initialTab={settingsInitialTab}
       />
 
       <UserAuthModal

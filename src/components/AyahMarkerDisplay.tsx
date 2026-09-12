@@ -13,6 +13,7 @@ import {
   Volume2,
 } from "lucide-react";
 import { AyahMarker } from "../types/quran";
+import { MushafModal } from "./MushafModal";
 
 export const AyahMarkerDisplay: React.FC = () => {
   const {
@@ -107,87 +108,107 @@ export const AyahMarkerDisplay: React.FC = () => {
     }
   };
 
+  const [isMushafOpen, setIsMushafOpen] = useState(false);
+
   return (
     <div className="w-full flex flex-col items-center justify-center my-2.5 relative z-40">
       <div ref={dropdownRef} className="relative inline-flex flex-col items-center max-w-full">
-        {/* Prominent Marker Card / Pill with Steppers */}
-        <div className="flex items-center gap-1 sm:gap-1.5 p-1 rounded-2xl bg-surface-subtle/80 hover:bg-surface-subtle border border-surface-border/90 shadow-md backdrop-blur-md transition-all">
-          {/* Previous Ayah Button */}
-          <button
-            type="button"
-            onClick={handlePrev}
-            disabled={!hasPrev && (!currentMarker || playbackPosition - currentMarker.startTime <= 1)}
-            title={hasPrev ? `Previous: ${currentMarkers[currentMarkerIndex - 1]?.title}` : "Start of Ayah"}
-            aria-label="Previous Ayah marker"
-            className="w-8 h-8 rounded-xl flex items-center justify-center text-content-muted hover:text-content-primary hover:bg-surface-hover active:scale-95 disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer shrink-0"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
+        {/* Row containing Bounding Box and Outside Book Button */}
+        <div className="flex items-center gap-2 max-w-full">
+          {/* Prominent Marker Card / Pill with Steppers (Bounding Box) */}
+          <div className="flex items-center gap-1 sm:gap-1.5 p-1 rounded-2xl bg-surface-subtle/80 hover:bg-surface-subtle border border-surface-border/90 shadow-md backdrop-blur-md transition-all">
+            {/* Previous Ayah Button */}
+            <button
+              type="button"
+              onClick={handlePrev}
+              disabled={!hasPrev && (!currentMarker || playbackPosition - currentMarker.startTime <= 1)}
+              title={hasPrev ? `Previous: ${currentMarkers[currentMarkerIndex - 1]?.title}` : "Start of Ayah"}
+              aria-label="Previous Ayah marker"
+              className="w-8 h-8 rounded-xl flex items-center justify-center text-content-muted hover:text-content-primary hover:bg-surface-hover active:scale-95 disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer shrink-0"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
 
-          {/* Central Prominent Marker Indicator / Trigger */}
-          <button
-            type="button"
-            onClick={() => setIsOpen(!isOpen)}
-            aria-haspopup="listbox"
-            aria-expanded={isOpen}
-            title="Click to choose an Ayah from this Juz"
-            className="flex items-center gap-2 px-2.5 sm:px-3.5 py-1.5 rounded-xl hover:bg-surface-hover/70 transition-all cursor-pointer group select-none max-w-[calc(100vw-7rem)] sm:max-w-md"
-          >
-            {/* Live Indicator Icon */}
-            <div className="relative flex items-center justify-center shrink-0">
-              <span className="w-6 h-6 rounded-lg bg-brand-light border border-brand-primary/20 flex items-center justify-center text-brand-primary group-hover:scale-105 transition">
-                <BookOpen className="w-3.5 h-3.5" />
-              </span>
-              {isPlaying && (
-                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-brand-primary animate-ping" />
-              )}
-            </div>
-
-            {/* Ayah Title & Index Badge */}
-            <div className="flex items-center gap-1.5 min-w-0 text-left">
-              {currentMarker ? (
-                <>
-                  <span className="font-bold text-xs sm:text-sm text-content-primary truncate tracking-tight">
-                    {currentMarker.surahName}
+            {/* Central Prominent Marker Indicator / Trigger (Book icon removed) */}
+            <button
+              type="button"
+              onClick={() => setIsOpen(!isOpen)}
+              aria-haspopup="listbox"
+              aria-expanded={isOpen}
+              title="Click to choose an Ayah from this Juz"
+              className="flex items-center gap-2 px-2.5 sm:px-3.5 py-1.5 rounded-xl hover:bg-surface-hover/70 transition-all cursor-pointer group select-none max-w-[calc(100vw-8rem)] sm:max-w-md"
+            >
+              {/* Ayah Title & Index Badge */}
+              <div className="flex items-center gap-1.5 min-w-0 text-left">
+                {currentMarker ? (
+                  <>
+                    <span className="font-bold text-xs sm:text-sm text-content-primary truncate tracking-tight">
+                      {currentMarker.surahName}
+                    </span>
+                    <span className="px-1.5 py-0.5 rounded-md bg-brand-primary/10 text-brand-primary font-mono font-bold text-[11px] sm:text-xs border border-brand-primary/20 shrink-0">
+                      {currentMarker.surahNumber}:{currentMarker.ayahNumber}
+                    </span>
+                  </>
+                ) : (
+                  <span className="font-medium text-xs text-content-muted">
+                    Loading Ayah...
                   </span>
-                  <span className="px-1.5 py-0.5 rounded-md bg-brand-primary/10 text-brand-primary font-mono font-bold text-[11px] sm:text-xs border border-brand-primary/20 shrink-0">
-                    {currentMarker.surahNumber}:{currentMarker.ayahNumber}
+                )}
+
+                {/* Ayah tally in Juz (e.g. 1/148) */}
+                {currentMarkerIndex >= 0 && (
+                  <span className="text-[10px] font-medium text-content-muted hidden sm:inline-block ml-0.5 shrink-0">
+                    ({currentMarkerIndex + 1}/{currentMarkers.length})
                   </span>
-                </>
-              ) : (
-                <span className="font-medium text-xs text-content-muted">
-                  Loading Ayah...
-                </span>
-              )}
+                )}
+              </div>
 
-              {/* Ayah tally in Juz (e.g. 1/148) */}
-              {currentMarkerIndex >= 0 && (
-                <span className="text-[10px] font-medium text-content-muted hidden sm:inline-block ml-0.5 shrink-0">
-                  ({currentMarkerIndex + 1}/{currentMarkers.length})
-                </span>
-              )}
-            </div>
+              {/* Dropdown Chevron */}
+              <ChevronDown
+                className={`w-3.5 h-3.5 text-content-muted group-hover:text-content-primary transition-transform duration-200 shrink-0 ${
+                  isOpen ? "rotate-180 text-brand-primary" : ""
+                }`}
+              />
+            </button>
 
-            {/* Dropdown Chevron */}
-            <ChevronDown
-              className={`w-3.5 h-3.5 text-content-muted group-hover:text-content-primary transition-transform duration-200 shrink-0 ${
-                isOpen ? "rotate-180 text-brand-primary" : ""
-              }`}
-            />
-          </button>
+            {/* Next Ayah Button */}
+            <button
+              type="button"
+              onClick={handleNext}
+              disabled={!hasNext}
+              title={hasNext ? `Next: ${currentMarkers[currentMarkerIndex + 1]?.title}` : "End of Juz"}
+              aria-label="Next Ayah marker"
+              className="w-8 h-8 rounded-xl flex items-center justify-center text-content-muted hover:text-content-primary hover:bg-surface-hover active:scale-95 disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer shrink-0"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
 
-          {/* Next Ayah Button */}
+          {/* Book Icon Button outside bounding box, to the right */}
           <button
             type="button"
-            onClick={handleNext}
-            disabled={!hasNext}
-            title={hasNext ? `Next: ${currentMarkers[currentMarkerIndex + 1]?.title}` : "End of Juz"}
-            aria-label="Next Ayah marker"
-            className="w-8 h-8 rounded-xl flex items-center justify-center text-content-muted hover:text-content-primary hover:bg-surface-hover active:scale-95 disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer shrink-0"
+            onClick={() => setIsMushafOpen(true)}
+            title="Open Mushaf & English Translation"
+            aria-label="Open Mushaf & English Translation"
+            className="w-10 h-10 rounded-2xl bg-surface-subtle/80 hover:bg-surface-hover border border-surface-border/90 text-brand-primary shadow-md backdrop-blur-md transition-all active:scale-95 cursor-pointer flex items-center justify-center shrink-0 group relative"
           >
-            <ChevronRight className="w-4 h-4" />
+            <BookOpen className="w-4 h-4 sm:w-4.5 sm:h-4.5 group-hover:scale-110 transition-transform" />
+            {isPlaying && (
+              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-brand-primary animate-ping" />
+            )}
           </button>
         </div>
+
+        {/* Mushaf Popup Modal */}
+        <MushafModal
+          isOpen={isMushafOpen}
+          onClose={() => setIsMushafOpen(false)}
+          onOpenSettings={() => {
+            window.dispatchEvent(
+              new CustomEvent("open-settings", { detail: { tab: "mushaf" } })
+            );
+          }}
+        />
 
         {/* Interactive Ayah Picker Dropdown */}
         {isOpen && (
