@@ -6,6 +6,7 @@ import { formatAudioTime, formatHeroTimer } from "../lib/utils";
 import { ChevronDown, Volume2, Clock, X } from "lucide-react";
 import { TimerModal } from "./TimerModal";
 import { PlaybackControls } from "./PlaybackControls";
+import { AyahMarkerDisplay } from "./AyahMarkerDisplay";
 
 const formatDisplayRange = (range: string) => {
   if (!range) return "";
@@ -256,6 +257,9 @@ export const JuzDisplay: React.FC = () => {
 
       {/* Divider */}
       <div className="w-full h-px bg-gradient-to-r from-transparent via-surface-border to-transparent my-3 sm:my-4" />
+
+      {/* EMBEDDED AYAH MARKER DISPLAY & SELECTOR (Above Juz selector, below horizontal rule) */}
+      <AyahMarkerDisplay />
 
       {/* 1.0 & 1.1 JUZ TITLE & SURAH RANGE */}
       <div className="flex flex-col items-center text-center space-y-1.5 relative px-2 z-30">

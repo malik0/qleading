@@ -14,6 +14,7 @@ import {
   AccountResetPayload,
   AccidentRecord,
   AppSettings,
+  AyahMarker,
   DayReadingRecord,
   JuzInfo,
   KhatmPlan,
@@ -26,6 +27,7 @@ import {
   UserState,
 } from "../types/quran";
 import { INITIAL_JUZ_LIST } from "../data/juzList";
+import { JUZ_MARKERS } from "../data/juzMarkers";
 import {
   DEFAULT_SETTINGS,
   INITIAL_USER_STATE,
@@ -79,6 +81,12 @@ interface AppContextType {
   confirmJuzSwitch: (juzId: number) => void;
   pendingJuzSwitch: number | null;
   cancelJuzSwitch: () => void;
+
+  // Embedded Ayah Markers
+  currentMarkers: AyahMarker[];
+  currentMarker: AyahMarker | null;
+  currentMarkerIndex: number;
+  seekToMarker: (markerIndex: number) => void;
 
   // Hero Timer
   timerSeconds: number;
@@ -396,13 +404,11 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
 
   const juzName = currentJuz.customName || currentJuz.defaultName;
   const juzRange = currentJuz.customRange || currentJuz.defaultRange;
-
-
   // Determine active audio URL:
-  // Uses local WebM files if preferLocalAudio is enabled and file has not failed,
-  // otherwise uses CDN MP3 streaming URL.
+  // Uses WebM files if preferLocalAudio is enabled and file has not failed,
+  // otherwise uses MP3 fallback audio URL.
   const getAudioUrlForJuz = useCallback(
-    (juz: JuzInfo) => {
+    (juz: JuzInfo): string => {
       if (settings.preferLocalAudio && !failedLocalJuzs[juz.id]) {
         return juz.localAudioUrl;
       }
@@ -835,7 +841,6 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
           }));
           if (audioRef.current) {
             const targetJuz = INITIAL_JUZ_LIST.find((j) => j.id === data.juzId) || INITIAL_JUZ_LIST[0];
-            audioRef.current.src = targetJuz.localAudioUrl;
             const targetUrl = getAudioUrlForJuz(targetJuz);
             if (!isSameAudioUrl(audioRef.current.src, targetUrl)) {
               audioRef.current.src = targetUrl;
@@ -1408,6 +1413,34 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
     recordAccident("reset_track", "Reset Track to 00:00");
     seekTo(0);
   }, [seekTo, recordAccident]);
+
+  // Embedded Ayah Markers for current Juz
+  const currentMarkers: AyahMarker[] = useMemo(() => {
+    return JUZ_MARKERS[currentJuz.id] || [];
+  }, [currentJuz.id]);
+
+  const currentMarkerIndex = useMemo(() => {
+    if (!currentMarkers || currentMarkers.length === 0) return -1;
+    const idx = currentMarkers.findIndex(
+      (m) => playbackPosition >= m.startTime && playbackPosition < m.endTime
+    );
+    if (idx !== -1) return idx;
+    if (playbackPosition >= currentMarkers[currentMarkers.length - 1].startTime) {
+      return currentMarkers.length - 1;
+    }
+    return 0;
+  }, [currentMarkers, playbackPosition]);
+
+  const currentMarker = currentMarkerIndex >= 0 ? currentMarkers[currentMarkerIndex] : null;
+
+  const seekToMarker = useCallback(
+    (markerIndex: number) => {
+      if (currentMarkers && currentMarkers[markerIndex]) {
+        seekTo(currentMarkers[markerIndex].startTime);
+      }
+    },
+    [currentMarkers, seekTo]
+  );
 
   const setSpeed = useCallback(
     (speed: PlaybackSpeed) => {
@@ -2570,6 +2603,10 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
         confirmJuzSwitch,
         pendingJuzSwitch,
         cancelJuzSwitch,
+        currentMarkers,
+        currentMarker,
+        currentMarkerIndex,
+        seekToMarker,
         timerSeconds: userState.timerSeconds,
         timerTargetMinutes: settings.timerTargetMinutes,
         timerMode: settings.timerMode,
@@ -2677,6 +2714,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
         onEnded={handleAudioEnded}
         onError={(e) => {
           console.warn("Audio source load error, falling back to CDN stream:", e);
+          console.warn("Audio source load error, falling back to MP3 stream:", e);
           if (settings.preferLocalAudio && !failedLocalJuzs[currentJuz.id]) {
             setFailedLocalJuzs((prev) => ({ ...prev, [currentJuz.id]: true }));
           }

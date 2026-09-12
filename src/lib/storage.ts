@@ -27,7 +27,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   autoTimerDurationMinutes: 30,
   timerMode: "countdown",
   streakStartDay: 1, // Monday
-  preferLocalAudio: false,
+  preferLocalAudio: true,
   themeMode: "dark",
   themeColor: "sky",
   defaultPlaybackSpeed: 1.0,

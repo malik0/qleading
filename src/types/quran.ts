@@ -1,3 +1,15 @@
+export interface AyahMarker {
+  id: number;
+  title: string; // e.g. "Al-Fatiha 1:1"
+  surahName: string; // e.g. "Al-Fatiha"
+  surahNumber: number; // e.g. 1
+  ayahNumber: number; // e.g. 1
+  startTime: number; // in seconds
+  endTime: number; // in seconds
+}
+
+export type JuzMarkersMap = Record<number, AyahMarker[]>;
+
 export interface JuzInfo {
   id: number;
   defaultName: string;
