@@ -18,6 +18,7 @@ import {
   Pencil,
   Plus,
   Flame,
+  AlertTriangle,
 } from "lucide-react";
 
 /**
@@ -108,6 +109,10 @@ export const KhatmPlanner: React.FC = () => {
   // Ref to today's schedule row for "Jump to Today"
   const todayRowRef = useRef<HTMLDivElement | null>(null);
   const todayTrackColRef = useRef<HTMLDivElement | null>(null);
+  const trackContainerRef = useRef<HTMLDivElement | null>(null);
+
+  // State for Khatm completion confirmation modal
+  const [dayPendingCompletion, setDayPendingCompletion] = useState<number | null>(null);
 
   // Sync form inputs when editing begins or when plan changes
   useEffect(() => {
@@ -244,6 +249,7 @@ export const KhatmPlanner: React.FC = () => {
   };
 
   // Jump to Today
+  // Jump to Today in schedule table
   const handleJumpToToday = () => {
     if (todayTrackColRef.current) {
       todayTrackColRef.current.scrollIntoView({
@@ -252,12 +258,39 @@ export const KhatmPlanner: React.FC = () => {
         block: "nearest",
       });
     }
+    scrollTrackToToday();
     if (todayRowRef.current) {
       todayRowRef.current.scrollIntoView({
         behavior: "smooth",
         block: "center",
       });
     }
+  };
+
+  // Scroll track to today horizontally without vertical page scroll
+  const scrollTrackToToday = () => {
+    if (trackContainerRef.current && todayTrackColRef.current) {
+      const container = trackContainerRef.current;
+      const target = todayTrackColRef.current;
+      const scrollLeft = target.offsetLeft - container.clientWidth / 2 + target.clientWidth / 2;
+      container.scrollTo({
+        left: Math.max(0, scrollLeft),
+        behavior: "smooth",
+      });
+    }
+  };
+
+  // Handle day completion toggle with final Khatm completion confirmation
+  const handleToggleDay = (dayIndex: number) => {
+    if (!khatmPlan) return;
+    const isCompleted = khatmPlan.completedDays?.includes(dayIndex);
+    const currentlyCompleted = khatmPlan.completedDays?.length || 0;
+    // Check if marking this day complete will finish the entire Khatm plan
+    if (!isCompleted && currentlyCompleted + 1 >= khatmPlan.durationDays) {
+      setDayPendingCompletion(dayIndex);
+      return;
+    }
+    toggleKhatmDayCompleted(dayIndex);
   };
 
   // Play audio for a given Juz
@@ -562,6 +595,128 @@ export const KhatmPlanner: React.FC = () => {
       {/* When a plan is active: render Daily Progress Bars, Finish Line, and Schedule */}
       {scheduleData && (
         <div className="space-y-5 sm:space-y-6">
+          {/* PROMINENT KHATM COMPLETION PIE CHART & OVERVIEW */}
+          {(() => {
+            const completedCount = scheduleData.completedCount;
+            const totalDays = scheduleData.durationDays;
+            const daysToGo = Math.max(0, totalDays - completedCount);
+            const percentCompleted = totalDays > 0 ? Math.min(100, Math.round((completedCount / totalDays) * 100)) : 0;
+            const percentToGo = 100 - percentCompleted;
+
+            // SVG Donut geometry
+            const radius = 54;
+            const circumference = 2 * Math.PI * radius; // ~339.292
+            const strokeDashoffset = circumference * (1 - percentCompleted / 100);
+
+            return (
+              <div className="p-4 sm:p-6 rounded-2xl sm:rounded-3xl bg-surface-subtle/90 border border-surface-border shadow-md">
+                <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+                  {/* Left: Donut Chart with center metrics */}
+                  <div className="flex items-center gap-5 sm:gap-6 shrink-0">
+                    <div className="relative w-32 h-32 sm:w-36 sm:h-36 flex items-center justify-center shrink-0">
+                      <svg className="w-full h-full -rotate-90 transform" viewBox="0 0 140 140">
+                        {/* Background ring representing Days To Go */}
+                        <circle
+                          cx="70"
+                          cy="70"
+                          r={radius}
+                          fill="transparent"
+                          stroke="currentColor"
+                          strokeWidth="12"
+                          className="text-slate-200 dark:text-slate-800"
+                        />
+                        {/* Foreground arc representing Days Completed */}
+                        <circle
+                          cx="70"
+                          cy="70"
+                          r={radius}
+                          fill="transparent"
+                          stroke="currentColor"
+                          strokeWidth="12"
+                          strokeDasharray={circumference}
+                          strokeDashoffset={strokeDashoffset}
+                          strokeLinecap="round"
+                          className="text-brand-primary transition-all duration-1000 ease-out"
+                        />
+                      </svg>
+                      {/* Center Percentage Display */}
+                      <div className="absolute inset-0 flex flex-col items-center justify-center text-center select-none pointer-events-none">
+                        <span className="text-2xl sm:text-3xl font-extrabold font-mono text-content-primary leading-tight">
+                          {percentCompleted}%
+                        </span>
+                        <span className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-content-muted">
+                          Completed
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Breakdown details next to donut chart */}
+                    <div className="space-y-2.5 select-none">
+                      <div className="flex items-center gap-2.5">
+                        <span className="w-3.5 h-3.5 rounded-md bg-brand-primary shadow-xs shrink-0" />
+                        <div>
+                          <div className="text-xs sm:text-sm font-bold text-content-primary">
+                            {completedCount} {completedCount === 1 ? "Day" : "Days"} Completed
+                          </div>
+                          <div className="text-[11px] text-content-muted">
+                            {percentCompleted}% of overall goal
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2.5">
+                        <span className="w-3.5 h-3.5 rounded-md bg-slate-300 dark:bg-slate-700 shadow-xs shrink-0" />
+                        <div>
+                          <div className="text-xs sm:text-sm font-bold text-content-secondary">
+                            {daysToGo} {daysToGo === 1 ? "Day" : "Days"} to Go
+                          </div>
+                          <div className="text-[11px] text-content-muted">
+                            {percentToGo}% remaining to finish
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right: Summary badges & Pace */}
+                  <div className="flex flex-wrap sm:flex-nowrap items-center gap-3 w-full md:w-auto md:border-l md:border-surface-border md:pl-6">
+                    <div className="p-3 sm:p-3.5 rounded-xl sm:rounded-2xl bg-surface-card border border-surface-border flex-1 min-w-[130px]">
+                      <span className="text-[11px] font-medium text-content-muted block">Days Logged</span>
+                      <span className="text-sm sm:text-base font-bold font-mono text-brand-primary">
+                        {completedCount} / {totalDays}
+                      </span>
+                      <span className="text-[10px] text-content-muted block mt-0.5">days marked</span>
+                    </div>
+
+                    <div className="p-3 sm:p-3.5 rounded-xl sm:rounded-2xl bg-surface-card border border-surface-border flex-1 min-w-[130px]">
+                      <span className="text-[11px] font-medium text-content-muted block">Schedule Pace</span>
+                      <div className="text-sm sm:text-base font-bold mt-0.5">
+                        {scheduleData.isFinished ? (
+                          <span className="text-emerald-500 flex items-center gap-1">
+                            <Trophy className="w-4 h-4" /> Finished!
+                          </span>
+                        ) : scheduleData.paceDiff > 0 ? (
+                          <span className="text-emerald-500 flex items-center gap-1">
+                            <Flame className="w-4 h-4" /> +{scheduleData.paceDiff} Ahead
+                          </span>
+                        ) : scheduleData.paceDiff === 0 ? (
+                          <span className="text-sky-500">On Track</span>
+                        ) : (
+                          <span className="text-amber-500">
+                            {Math.abs(scheduleData.paceDiff)} Behind
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[10px] text-content-muted block mt-0.5">
+                        {daysToGo === 0 ? "Goal completed" : `${daysToGo} days left`}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Plan Meta Overview Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
             <div className="p-3 sm:p-3.5 rounded-2xl bg-surface-subtle border border-surface-border">
@@ -662,7 +817,7 @@ export const KhatmPlanner: React.FC = () => {
 
           {/* DUAL-TRACK PROGRESS BARS WITH DAILY SEGMENTS & DOTTED FINISH LINE */}
           <div className="p-3.5 sm:p-5 rounded-2xl bg-surface-subtle/80 border border-surface-border space-y-3.5 sm:space-y-4">
-            <div className="flex items-center justify-between gap-2.5 sm:gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3">
               <div className="min-w-0">
                 <h3 className="text-xs sm:text-sm font-bold text-content-primary flex items-center gap-1.5">
                   <Flag className="w-4 h-4 text-brand-primary shrink-0" />
@@ -670,21 +825,23 @@ export const KhatmPlanner: React.FC = () => {
                 </h3>
               </div>
 
-              {/* Scroll track to Today (available on both desktop and mobile) */}
+              <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 text-[11px] font-medium">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded-md bg-emerald-500 inline-block shadow-sm shrink-0" />
+                  <span className="text-content-secondary">Completed Listenings</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded-md bg-sky-500 inline-block shadow-sm shrink-0" />
+                  <span className="text-content-secondary">Scheduled Pace (Today)</span>
+                </div>
+              </div>
+
+              {/* Scroll track to Today (horizontal-only container scroll) */}
               <button
                 type="button"
-                onClick={() => {
-                  if (todayTrackColRef.current) {
-                    todayTrackColRef.current.scrollIntoView({
-                      behavior: "smooth",
-                      inline: "center",
-                      block: "nearest",
-                    });
-                    todayTrackColRef.current.focus();
-                  }
-                }}
-                className="text-[11px] font-semibold text-brand-primary bg-brand-light hover:bg-brand-light/70 border border-brand-primary/25 rounded-lg px-2.5 py-1 active:scale-95 flex items-center gap-1.5 cursor-pointer transition select-none shadow-xs focus:outline-none shrink-0"
-                title="Scroll and focus current date in track"
+                onClick={scrollTrackToToday}
+                className="text-[11px] font-semibold text-brand-primary bg-brand-light hover:bg-brand-light/70 border border-brand-primary/25 rounded-lg px-2.5 py-1 active:scale-95 flex items-center gap-1.5 cursor-pointer transition select-none shadow-xs focus:outline-none shrink-0 self-end sm:self-auto"
+                title="Scroll track to today without scrolling page vertically"
               >
                 <span>Scroll track to Today</span>
                 <span>→</span>
@@ -692,7 +849,7 @@ export const KhatmPlanner: React.FC = () => {
             </div>
 
             {/* The Track Container */}
-            <div className="relative overflow-x-auto pb-2 scrollbar-thin">
+            <div ref={trackContainerRef} className="relative overflow-x-auto pb-2 scrollbar-thin">
               <div className="min-w-max flex items-stretch pr-4">
                 {/* Left Lane Indicators */}
                 <div className="shrink-0 flex flex-col justify-between py-1 pr-2 sm:pr-3 select-none">
@@ -744,7 +901,7 @@ export const KhatmPlanner: React.FC = () => {
                           <button
                             key={`completed-segment-${day.dayIndex}`}
                             type="button"
-                            onClick={() => toggleKhatmDayCompleted(day.dayIndex)}
+                            onClick={() => handleToggleDay(day.dayIndex)}
                             title={`Day ${day.dayNumber} (${formatHumanDate(day.dateStr)}): ${
                               day.juzLabel
                             } • ${isDone ? "Completed (tap to undo)" : "Tap to mark done"}`}
@@ -891,7 +1048,7 @@ export const KhatmPlanner: React.FC = () => {
                       {/* Completed Toggle Button */}
                       <button
                         type="button"
-                        onClick={() => toggleKhatmDayCompleted(day.dayIndex)}
+                        onClick={() => handleToggleDay(day.dayIndex)}
                         title={day.isCompleted ? "Mark undone" : "Mark completed"}
                         className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 transition cursor-pointer ${
                           day.isCompleted
@@ -981,6 +1138,44 @@ export const KhatmPlanner: React.FC = () => {
                   </div>
                 );
               })}
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Khatm Completion Confirmation Modal */}
+      {dayPendingCompletion !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-surface-card border border-surface-border rounded-2xl sm:rounded-3xl p-6 max-w-sm w-full shadow-2xl space-y-4 animate-in zoom-in-95">
+            <div className="flex items-center gap-3 text-amber-500">
+              <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
+              </div>
+              <h3 className="text-base sm:text-lg font-bold text-content-primary">
+                Complete this Khatm?
+              </h3>
+            </div>
+            <p className="text-xs sm:text-sm text-content-secondary leading-relaxed">
+              You are about to mark the final day complete, which will complete your entire Khatm plan. Are you sure you want to finish this Khatm?
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setDayPendingCompletion(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-surface-subtle hover:bg-surface-hover text-content-secondary border border-surface-border transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const idx = dayPendingCompletion;
+                  setDayPendingCompletion(null);
+                  toggleKhatmDayCompleted(idx);
+                }}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-md transition cursor-pointer active:scale-95"
+              >
+                Yes, Complete Khatm
+              </button>
             </div>
           </div>
         </div>

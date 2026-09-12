@@ -122,6 +122,9 @@ interface AppContextType {
     completedIds?: number[];
     streakDays?: number;
     todayJuzCount?: number;
+    targetDate?: string;
+    dateJuzCount?: number;
+    dateJuzCounts?: Record<string, number>;
   }) => void;
   toggleDayStreakManually: (dateStr: string) => void;
 
@@ -1366,9 +1369,28 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
       }
       setPlaybackPosition(targetSec);
       playbackPosRef.current = targetSec;
+
+      let updatedTimerSec: number | undefined = undefined;
+      if (isTimerMatchedToAudioRef.current) {
+        const curDur =
+          audioRef.current &&
+          !isNaN(audioRef.current.duration) &&
+          isFinite(audioRef.current.duration) &&
+          audioRef.current.duration > 0
+            ? audioRef.current.duration
+            : durationRef.current > 0
+            ? durationRef.current
+            : currentJuzRef.current.approxDurationSeconds || 2776;
+        const spd = playbackSpeedRef.current || 1.0;
+        const adjustedLeft = Math.max(0, Math.round((curDur - targetSec) / spd));
+        timerSecondsRef.current = adjustedLeft;
+        updatedTimerSec = adjustedLeft;
+      }
+
       updateStateAndPersist((s) => ({
         ...s,
         playbackPositionSeconds: targetSec,
+        ...(updatedTimerSec !== undefined ? { timerSeconds: updatedTimerSec } : {}),
       }));
     },
     [duration, updateStateAndPersist, recordAccident]
@@ -1398,6 +1420,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
       updateSettings({ defaultPlaybackSpeed: speed });
 
       // Dynamically readjust Big Timer if it was matched to audio
+      // Dynamically readjust Big Timer only if it was matched to audio
       if (isTimerMatchedToAudioRef.current) {
         const curDur =
           audioRef.current &&
@@ -1442,7 +1465,11 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
       durationRef.current = targetDuration;
 
       const activePlaybackSpeed = playbackSpeedRef.current || playbackSpeed || 1.0;
-      const nextTimerSec = Math.round(targetDuration / activePlaybackSpeed);
+      let nextTimerSec = timerSecondsRef.current;
+      if (isTimerMatchedToAudioRef.current) {
+        nextTimerSec = Math.round(targetDuration / activePlaybackSpeed);
+        timerSecondsRef.current = nextTimerSec;
+      }
 
       const updatedState: UserState = {
         ...userStateRef.current,
@@ -1656,6 +1683,8 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
 
       // Timer update:
       // Decrements by 1 every second while audio plays.
+      // When matched to audio, it tracks remaining audio playback time in exact lockstep.
+      // Otherwise, decrements by 1 every second while audio plays (strictly 1 second per real second).
       // When reaching 0 and beyond, it continues into negative seconds (-1, -2, -3...),
       // which formatHeroTimer formats with '+' and counts upwards in overtime.
       const targetSec = settings.timerTargetMinutes * 60;
@@ -1665,7 +1694,21 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
 
       if (isNewDay) {
         nextTimerSec = targetSec;
+      } else if (isTimerMatchedToAudioRef.current) {
+        // In Audio Match mode: calculate remaining playback time directly so Big Timer and Audio Match NEVER drift
+        const curDur =
+          audioRef.current &&
+          !isNaN(audioRef.current.duration) &&
+          isFinite(audioRef.current.duration) &&
+          audioRef.current.duration > 0
+            ? audioRef.current.duration
+            : durationRef.current > 0
+            ? durationRef.current
+            : currentJuzRef.current.approxDurationSeconds || 2776;
+        const spd = playbackSpeedRef.current || 1.0;
+        nextTimerSec = Math.max(0, Math.round((curDur - currentPos) / spd));
       } else {
+        // Standard countdown rate: strictly 1 second per real-time second regardless of playback speed
         nextTimerSec = nextTimerSec - 1;
       }
       timerSecondsRef.current = nextTimerSec;
@@ -1761,12 +1804,17 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
     };
 
     // 2. Timer Handling:
+    // If matched to audio, set to next Juz duration divided by speed.
     // If autoTimerDurationMinutes is explicitly configured in settings, reset to that duration.
     // If not explicitly configured, and Big Timer has NOT expired (> 0), KEEP the remaining time!
     // If timer had already expired (<= 0), reset to default target.
     const autoMinutes = settingsRef.current.autoTimerDurationMinutes;
     let nextTimerSec = timerSecondsRef.current;
-    if (autoMinutes !== undefined && autoMinutes !== null && autoMinutes > 0) {
+    if (isTimerMatchedToAudioRef.current) {
+      const activeSpd = playbackSpeedRef.current || 1.0;
+      nextTimerSec = Math.round((nextJuz.approxDurationSeconds || 2776) / activeSpd);
+      timerSecondsRef.current = nextTimerSec;
+    } else if (autoMinutes !== undefined && autoMinutes !== null && autoMinutes > 0) {
       nextTimerSec = settingsRef.current.timerMode === "countdown" ? autoMinutes * 60 : 0;
       timerSecondsRef.current = nextTimerSec;
     } else if (timerSecondsRef.current <= 0) {
@@ -2055,11 +2103,17 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
       completedIds,
       streakDays,
       todayJuzCount,
+      targetDate,
+      dateJuzCount,
+      dateJuzCounts,
     }: {
       tally: number;
       completedIds?: number[];
       streakDays?: number;
       todayJuzCount?: number;
+      targetDate?: string;
+      dateJuzCount?: number;
+      dateJuzCounts?: Record<string, number>;
     }) => {
       const validTally = Math.max(0, Math.round(tally));
       const today = new Date();
@@ -2086,14 +2140,45 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
             history[dStr] = {
               ...existing,
               targetReached: shouldBeCompleted,
-              juzCompletedCount: shouldBeCompleted
-                ? Math.max(1, existing.juzCompletedCount || 1)
-                : 0,
             };
           }
         }
 
-        if (todayJuzCount !== undefined) {
+        // Apply any dictionary of multiple date counts
+        if (dateJuzCounts) {
+          Object.entries(dateJuzCounts).forEach(([dStr, count]) => {
+            const validCount = Math.max(0, Math.round(count));
+            const existing = history[dStr] || {
+              date: dStr,
+              secondsRead: 0,
+              targetReached: false,
+              slots: {},
+              juzCompletedCount: 0,
+              completedJuzIds: [],
+            };
+            history[dStr] = {
+              ...existing,
+              juzCompletedCount: validCount,
+            };
+          });
+        }
+
+        // Apply single date count if provided
+        if (targetDate && dateJuzCount !== undefined) {
+          const validCount = Math.max(0, Math.round(dateJuzCount));
+          const existing = history[targetDate] || {
+            date: targetDate,
+            secondsRead: 0,
+            targetReached: false,
+            slots: {},
+            juzCompletedCount: 0,
+            completedJuzIds: [],
+          };
+          history[targetDate] = {
+            ...existing,
+            juzCompletedCount: validCount,
+          };
+        } else if (todayJuzCount !== undefined && !dateJuzCounts) {
           const validTodayCount = Math.max(0, Math.round(todayJuzCount));
           const existingToday = history[todayStr] || {
             date: todayStr,
@@ -2106,7 +2191,6 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
           history[todayStr] = {
             ...existingToday,
             juzCompletedCount: validTodayCount,
-            targetReached: validTodayCount > 0 ? true : existingToday.targetReached,
           };
         }
 

@@ -31,6 +31,7 @@ export const JuzDisplay: React.FC = () => {
     timerSeconds,
     isTimerRunning,
     todayRecord,
+    khatmPlan,
   } = useApp();
 
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -131,11 +132,30 @@ export const JuzDisplay: React.FC = () => {
   // Requirement 1 & 8: Juz tally of the day displayed as small filled circle(s)
   // above the date but below the border of the Juz Display
   const todayJuzCount =
-    todayRecord.juzCompletedCount ||
-    (todayRecord.completedJuzIds ? todayRecord.completedJuzIds.length : 0);
+    todayRecord.juzCompletedCount !== undefined
+      ? todayRecord.juzCompletedCount
+      : (todayRecord.completedJuzIds ? todayRecord.completedJuzIds.length : 0);
+
+  const khatmProgressPercent =
+    khatmPlan && khatmPlan.durationDays > 0
+      ? Math.min(100, Math.round(((khatmPlan.completedDays?.length || 0) / khatmPlan.durationDays) * 100))
+      : 0;
 
   return (
     <div className="w-full bg-surface-card border border-surface-border rounded-2xl sm:rounded-3xl p-4 sm:p-5 backdrop-blur-xl shadow-2xl relative z-20 transition-colors duration-200">
+      {/* Creative Top Border Khatm Progress Bar (zero layout shift, flush along top edge) */}
+      {khatmPlan && khatmPlan.durationDays > 0 && (
+        <div
+          className="absolute top-0 left-0 right-0 h-1 sm:h-1.5 overflow-hidden rounded-t-2xl sm:rounded-t-3xl pointer-events-none z-30"
+          title={`Khatm Progress: ${khatmProgressPercent}% (${khatmPlan.completedDays?.length || 0} of ${khatmPlan.durationDays} days completed)`}
+        >
+          <div
+            className="h-full bg-gradient-to-r from-brand-primary via-emerald-400 to-brand-primary transition-all duration-700 ease-out shadow-[0_0_8px_rgba(var(--color-primary-rgb),0.6)]"
+            style={{ width: `${khatmProgressPercent}%` }}
+          />
+        </div>
+      )}
+
       {/* Subtle Background Glows matching active theme (isolated in overflow-hidden layer) */}
       <div className="absolute inset-0 rounded-2xl sm:rounded-3xl overflow-hidden pointer-events-none -z-10">
         <div
@@ -169,12 +189,15 @@ export const JuzDisplay: React.FC = () => {
               title={`${todayJuzCount} Juz completed today`}
             >
               <div className="flex items-center gap-1">
-                {Array.from({ length: Math.min(todayJuzCount, 12) }).map((_, idx) => (
+                {Array.from({ length: Math.min(todayJuzCount, 3) }).map((_, idx) => (
                   <span
                     key={idx}
                     className="w-2.5 h-2.5 rounded-full bg-brand-primary shadow-sm ring-1 ring-brand-light animate-fadeIn inline-block"
                   />
                 ))}
+                {todayJuzCount > 3 && (
+                  <span className="text-xs font-bold text-brand-primary leading-none select-none">+</span>
+                )}
               </div>
               <span className="text-[11px] font-semibold text-brand-primary font-mono ml-0.5">
                 {todayJuzCount} {todayJuzCount === 1 ? "Juz" : "Juzs"} today

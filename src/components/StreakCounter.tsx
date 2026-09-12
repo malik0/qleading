@@ -100,9 +100,10 @@ export const StreakCounter: React.FC = () => {
         ? todayRecord.completedJuzIds || []
         : record?.completedJuzIds || [];
 
-      // Requirement: A day is marked complete/colored only if a single Juz has been listened to on that day. You cannot complete it prior to that day.
-      const completed = !isFuture && Boolean(juzCompletedCount >= 1 || completedJuzIds.length >= 1);
+      // Requirement: The background blue coloring of the day circle should be strictly linked to the time target for daily streak.
       const secondsRead = isFuture ? 0 : isToday ? todayRecord.secondsRead : record?.secondsRead || 0;
+      const isTimeTargetMet = !isFuture && Boolean(secondsRead >= targetSeconds || (record?.targetReached ?? false));
+      const completed = isTimeTargetMet;
       const progress = completed ? 1 : isFuture ? 0 : Math.min(1, Math.max(0, secondsRead / targetSeconds));
 
       days.push({
@@ -132,24 +133,21 @@ export const StreakCounter: React.FC = () => {
     todayStr,
   ]);
 
-  // 4.4 QUICK STATS: PAST 30 DAYS SUCCESS (UPDATED VIA JUZ TALLY & TARGET)
+  // 4.4 QUICK STATS: PAST 30 DAYS SUCCESS (STRICTLY LINKED TO DAILY STREAK TIME TARGET)
   const stats30Days = useMemo(() => {
     let completedCount = 0;
+    const targetSeconds = (streakTargetMinutes || 30) * 60;
     for (let i = 1; i <= 30; i++) {
       const d = new Date(todayDate);
       d.setDate(todayDate.getDate() - i);
       const dateStr = getLocalDateString(d);
       const rec = historyRecords[dateStr];
-      const count = rec?.juzCompletedCount || (rec?.completedJuzIds ? rec.completedJuzIds.length : 0);
-      if (rec && count >= 1) {
+      if (rec && (rec.targetReached || (rec.secondsRead || 0) >= targetSeconds)) {
         completedCount++;
       }
     }
-    // Also include today if a single Juz has been listened to
-    const todayCount =
-      todayRecord.juzCompletedCount ||
-      (todayRecord.completedJuzIds ? todayRecord.completedJuzIds.length : 0);
-    if (todayCount >= 1) {
+    // Also include today if time target was met
+    if (todayRecord.targetReached || (todayRecord.secondsRead || 0) >= targetSeconds) {
       completedCount++;
     }
     const percent = Math.round((completedCount / 30) * 100);
@@ -159,8 +157,9 @@ export const StreakCounter: React.FC = () => {
     };
   }, [
     historyRecords,
-    todayRecord.juzCompletedCount,
-    todayRecord.completedJuzIds,
+    streakTargetMinutes,
+    todayRecord.targetReached,
+    todayRecord.secondsRead,
   ]);
 
   // 4.3 MONTHLY CALENDAR VIEW DAYS
@@ -198,9 +197,10 @@ export const StreakCounter: React.FC = () => {
         : record?.completedJuzIds || [];
       const secondsRead = isToday ? todayRecord.secondsRead : record?.secondsRead || 0;
 
-      // Completed only if a single Juz has been listened to on that day; cannot be completed prior to that day
-      const completed = !isFuture && Boolean(juzCompletedCount >= 1 || completedJuzIds.length >= 1);
+      const targetSeconds = (streakTargetMinutes || 30) * 60;
       const safeSecondsRead = isFuture ? 0 : secondsRead;
+      // Background coloring is strictly linked to time target for daily streak
+      const completed = !isFuture && Boolean(safeSecondsRead >= targetSeconds || (record?.targetReached ?? false));
 
       daysArray.push({
         date: d,
@@ -225,6 +225,7 @@ export const StreakCounter: React.FC = () => {
   }, [
     calendarMonthOffset,
     historyRecords,
+    streakTargetMinutes,
     todayRecord.targetReached,
     todayRecord.secondsRead,
     todayRecord.juzCompletedCount,
@@ -415,7 +416,7 @@ export const StreakCounter: React.FC = () => {
                 >
                   {item.juzCompletedCount > 0 && (
                     <>
-                      {Array.from({ length: Math.min(item.juzCompletedCount, 4) }).map((_, dotIdx) => (
+                      {Array.from({ length: Math.min(item.juzCompletedCount, 3) }).map((_, dotIdx) => (
                         <span
                           key={dotIdx}
                           className={`w-1.5 h-1.5 rounded-full ${
@@ -425,13 +426,13 @@ export const StreakCounter: React.FC = () => {
                           }`}
                         />
                       ))}
-                      {item.juzCompletedCount > 4 && (
+                      {item.juzCompletedCount > 3 && (
                         <span
-                          className={`text-[9px] font-bold leading-none ${
+                          className={`text-[10px] font-bold leading-none select-none ${
                             isCompleted ? "text-sky-400" : "text-brand-primary"
                           }`}
                         >
-                          +{item.juzCompletedCount - 4}
+                          +
                         </span>
                       )}
                     </>
@@ -558,6 +559,15 @@ export const StreakCounter: React.FC = () => {
                             }`}
                           />
                         ))}
+                        {dayItem.juzCompletedCount > 3 && (
+                          <span
+                            className={`text-[8px] font-bold leading-none select-none ${
+                              dayItem.completed ? "text-slate-950" : "text-brand-primary"
+                            }`}
+                          >
+                            +
+                          </span>
+                        )}
                       </div>
                     )}
                   </button>

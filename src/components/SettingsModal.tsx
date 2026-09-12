@@ -244,6 +244,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   // Local state for Manual Tally and Streak adjustments
   // Local state for Manual Tally, Today's Juz count, and Streak adjustments
+  const todayStr = React.useMemo(() => new Date().toLocaleDateString("en-CA"), []);
+  const [selectedAdjustDate, setSelectedAdjustDate] = useState<string>(todayStr);
+  const [dateJuzOverrides, setDateJuzOverrides] = useState<Record<string, number>>({});
+
   const initialTodayJuzCount =
     todayRecord.juzCompletedCount !== undefined
       ? todayRecord.juzCompletedCount
@@ -267,6 +271,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   });
   const [progressSaveNotice, setProgressSaveNotice] = useState<string | null>(null);
 
+  const getJuzCountForDate = (dateStr: string) => {
+    if (dateJuzOverrides[dateStr] !== undefined) {
+      return dateJuzOverrides[dateStr];
+    }
+    if (dateStr === todayStr) {
+      return todayRecord.juzCompletedCount !== undefined
+        ? todayRecord.juzCompletedCount
+        : (todayRecord.completedJuzIds ? todayRecord.completedJuzIds.length : 0);
+    }
+    const rec = historyRecords[dateStr];
+    return rec?.juzCompletedCount !== undefined
+      ? rec.juzCompletedCount
+      : (rec?.completedJuzIds ? rec.completedJuzIds.length : 0);
+  };
+
+  const currentDateJuzCount = getJuzCountForDate(selectedAdjustDate);
+
   // Sync state when modal opens
   React.useEffect(() => {
     if (isOpen) {
@@ -289,9 +310,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         }
       }
       setManualStreakDays(count);
+      setSelectedAdjustDate(todayStr);
+      setDateJuzOverrides({});
       setProgressSaveNotice(null);
     }
-  }, [isOpen, juzTally, completedJuzs, historyRecords, todayRecord]);
+  }, [isOpen, juzTally, completedJuzs, historyRecords, todayRecord, todayStr]);
 
   if (!isOpen) return null;
 
@@ -950,37 +973,66 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </p>
               </div>
 
-              {/* Section 1: Daily Juz Listened Today */}
+              {/* Section 1: Daily Juz Listened (Date Picker) */}
               <div className="p-4 rounded-2xl bg-surface-subtle/60 border border-surface-border space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div>
                     <span className="text-sm font-bold text-content-primary block">
-                      Daily Juz Listened Today
+                      Daily Juz Listened
                     </span>
                     <span className="text-xs text-content-muted">
-                      Number of completed Juz recitations tracked for today (reflected as indicator dots)
+                      Select any date to view and adjust the number of completed Juz recitations tracked for that day
                     </span>
                   </div>
-                  <div className="flex items-center gap-1.5 bg-brand-light px-3 py-1 rounded-xl border border-brand-primary/20">
+                  <div className="flex items-center gap-1.5 bg-brand-light px-3 py-1 rounded-xl border border-brand-primary/20 self-start sm:self-center">
                     <div className="flex items-center gap-1">
-                      {Array.from({ length: Math.min(manualTodayJuzInput, 10) }).map((_, idx) => (
+                      {Array.from({ length: Math.min(currentDateJuzCount, 3) }).map((_, idx) => (
                         <span
                           key={idx}
                           className="w-2 h-2 rounded-full bg-brand-primary shadow-xs"
                         />
                       ))}
+                      {currentDateJuzCount > 3 && (
+                        <span className="text-[11px] font-bold text-brand-primary leading-none select-none">+</span>
+                      )}
                     </div>
                     <span className="text-sm font-mono font-bold text-brand-primary">
-                      {manualTodayJuzInput} {manualTodayJuzInput === 1 ? "Juz" : "Juzs"} today
+                      {currentDateJuzCount} {currentDateJuzCount === 1 ? "Juz" : "Juzs"}
                     </span>
                   </div>
                 </div>
 
+                {/* Date Picker Row */}
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 pt-1">
+                  <label className="text-xs font-semibold text-content-secondary flex items-center gap-1.5 shrink-0">
+                    <Calendar className="w-3.5 h-3.5 text-brand-primary" />
+                    <span>Select Date:</span>
+                  </label>
+                  <input
+                    type="date"
+                    max={todayStr}
+                    value={selectedAdjustDate}
+                    onChange={(e) => setSelectedAdjustDate(e.target.value || todayStr)}
+                    className="flex-1 sm:max-w-[220px] bg-surface-card border border-surface-border rounded-xl px-3 py-1.5 text-xs font-mono font-semibold text-content-primary focus:outline-none focus:border-brand-primary"
+                  />
+                  {selectedAdjustDate === todayStr && (
+                    <span className="text-[11px] font-bold text-brand-primary bg-brand-light px-2 py-0.5 rounded-lg border border-brand-primary/20 w-fit">
+                      Today
+                    </span>
+                  )}
+                </div>
+
+                {/* Counter Buttons */}
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setManualTodayJuzInput((prev) => Math.max(0, prev - 1))}
-                    title="Decrease today's Juz count by 1"
+                    onClick={() =>
+                      setDateJuzOverrides((prev) => ({
+                        ...prev,
+                        [selectedAdjustDate]: Math.max(0, currentDateJuzCount - 1),
+                      }))
+                    }
+                    title="Decrease Juz count by 1"
                     className="p-2.5 rounded-xl bg-surface-card hover:bg-surface-hover border border-surface-border text-content-secondary hover:text-content-primary transition cursor-pointer"
                   >
                     <Minus className="w-4 h-4" />
@@ -989,16 +1041,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     type="number"
                     min={0}
                     max={99}
-                    value={manualTodayJuzInput}
-                    onChange={(e) =>
-                      setManualTodayJuzInput(Math.max(0, parseInt(e.target.value, 10) || 0))
-                    }
+                    value={currentDateJuzCount}
+                    onChange={(e) => {
+                      const val = Math.max(0, parseInt(e.target.value, 10) || 0);
+                      setDateJuzOverrides((prev) => ({
+                        ...prev,
+                        [selectedAdjustDate]: val,
+                      }));
+                    }}
                     className="flex-1 bg-surface-card border border-surface-border rounded-xl px-3 py-2 text-center text-base font-mono font-bold text-content-primary focus:outline-none focus:border-brand-primary"
                   />
                   <button
                     type="button"
-                    onClick={() => setManualTodayJuzInput((prev) => prev + 1)}
-                    title="Increase today's Juz count by 1"
+                    onClick={() =>
+                      setDateJuzOverrides((prev) => ({
+                        ...prev,
+                        [selectedAdjustDate]: currentDateJuzCount + 1,
+                      }))
+                    }
+                    title="Increase Juz count by 1"
                     className="p-2.5 rounded-xl bg-surface-card hover:bg-surface-hover border border-surface-border text-content-secondary hover:text-content-primary transition cursor-pointer"
                   >
                     <Plus className="w-4 h-4" />
@@ -1052,7 +1113,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               </div>
 
-              {/* Section 2: 30 Juz Checklist Completion */}
               {/* Section 3: 30 Juz Checklist Completion */}
               <div className="p-4 rounded-2xl bg-surface-subtle/60 border border-surface-border space-y-3">
                 <div className="flex items-center justify-between">
@@ -1173,8 +1233,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       completedIds: manualCompletedJuzs,
                       streakDays: manualStreakDays,
                       todayJuzCount: manualTodayJuzInput,
+                      dateJuzCounts: dateJuzOverrides,
+                      targetDate: selectedAdjustDate,
+                      dateJuzCount: currentDateJuzCount,
                     });
-                    setProgressSaveNotice("Juz tally, streaks, and today's count successfully updated!");
+                    setProgressSaveNotice("Juz tally, streaks, and day's count successfully updated!");
                     setTimeout(() => setProgressSaveNotice(null), 3000);
                   }}
                   className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-brand-primary hover:bg-brand-hover text-white font-bold text-sm shadow-md transition active:scale-98 cursor-pointer"
