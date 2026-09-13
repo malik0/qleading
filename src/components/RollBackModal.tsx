@@ -13,8 +13,8 @@ import {
   BookmarkPlus,
   Radio,
 } from "lucide-react";
-import { SyncPoint } from "../types/quran";
-import { getAyahMarkerForPosition } from "../data/juzMarkers";
+import type { SyncPoint } from "../types/quran";
+import { getAyahMarkerForPosition } from "../lib/juzMarkers";
 
 function formatJuzName(juzId: number, customName?: string, defaultName?: string): string {
   const name = (customName || defaultName || "").trim();

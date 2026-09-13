@@ -27,7 +27,8 @@ import {
   UserState,
 } from "../types/quran";
 import { INITIAL_JUZ_LIST } from "../data/juzList";
-import { JUZ_MARKERS, getAyahMarkerForPosition } from "../data/juzMarkers";
+import { JUZ_MARKERS } from "../data/juzMarkers";
+import { getAyahMarkerForPosition } from "../lib/juzMarkers";
 import {
   DEFAULT_SETTINGS,
   INITIAL_USER_STATE,

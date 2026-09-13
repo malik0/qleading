@@ -140,25 +140,11 @@ async function extractMarkersAndDurations() {
     }
   }
 
-  // Write src/data/juzMarkers.ts
-  const markersFilePath = path.join(__dirname, '..', 'src', 'data', 'juzMarkers.ts');
-  const markersFileContent = `// Generated automatically from embedded audio markers in the 30 Juz audio files
-export interface AyahMarker {
-  id: number;
-  title: string;        // e.g. "Al-Fatiha 1:1"
-  surahName: string;    // e.g. "Al-Fatiha"
-  surahNumber: number;  // e.g. 1
-  ayahNumber: number;   // e.g. 1
-  startTime: number;    // seconds with millisecond precision
-  endTime: number;      // seconds with millisecond precision
-}
+  // Write the static dataset; keep the TypeScript loader and lookup helper intact.
+  const markersFilePath = path.join(__dirname, '..', 'src', 'data', 'juzMarkers.json');
+  const fileContent = JSON.stringify(markersMap, null, 2) + '\n';
 
-export type JuzMarkersMap = Record<number, AyahMarker[]>;
-
-export const JUZ_MARKERS: JuzMarkersMap = ${JSON.stringify(markersMap, null, 2)};
-`;
-
-  fs.writeFileSync(markersFilePath, markersFileContent, 'utf-8');
+  fs.writeFileSync(markersFilePath, fileContent, 'utf-8');
   console.log(`\nSuccessfully wrote markers to ${markersFilePath}!`);
 
   return { markersMap, durationsMap };

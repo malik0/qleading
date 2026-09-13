@@ -71,11 +71,8 @@ async function extract() {
     console.log(`Juz ${numStr}: ${markers.length} markers, ${durationsMap[juzId]}s`);
   }
 
-  const markersFilePath = path.join(__dirname, '..', 'src', 'data', 'juzMarkers.ts');
-  const fileContent = `import { AyahMarker, JuzMarkersMap } from "../types/quran";
-
-export const JUZ_MARKERS: JuzMarkersMap = ${JSON.stringify(markersMap, null, 2)};
-`;
+  const markersFilePath = path.join(__dirname, '..', 'src', 'data', 'juzMarkers.json');
+  const fileContent = JSON.stringify(markersMap, null, 2) + '\n';
 
   fs.writeFileSync(markersFilePath, fileContent, 'utf-8');
   console.log(`\nSuccessfully wrote ${totalCount} markers to ${markersFilePath}!`);
