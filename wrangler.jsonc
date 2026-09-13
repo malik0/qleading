@@ -8,6 +8,12 @@
     "directory": ".open-next/assets",
     "binding": "ASSETS"
   },
+  "r2_buckets": [
+    {
+      "binding": "AUDIO",
+      "bucket_name": "qleading-audio"
+    }
+  ],
   "d1_databases": [
     {
       "binding": "DB",
@@ -16,4 +22,3 @@
     }
   ]
 }
-

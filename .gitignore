@@ -9,6 +9,7 @@ out/
 # OpenNext & Cloudflare build output
 .open-next/
 .wrangler/
+public/audio/
 
 # TypeScript build info
 *.tsbuildinfo
@@ -28,4 +29,3 @@ pnpm-debug.log*
 # OS Files
 .DS_Store
 Thumbs.db
-

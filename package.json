@@ -11,6 +11,7 @@
     "preview": "wrangler dev",
     "deploy": "npm run build:cloudflare && wrangler deploy",
     "download-audio": "node scripts/download-and-compress-audio.mjs",
+    "upload:audio": "node scripts/upload-audio-to-r2.mjs",
     "generate-icons": "node scripts/generate_app_icons.cjs"
   },
   "keywords": [],

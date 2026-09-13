@@ -432,7 +432,13 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
     [settings.preferLocalAudio, failedLocalJuzs]
   );
 
-  const activeAudioUrl = getAudioUrlForJuz(currentJuz);
+  // Keep SSR and the first client render deterministic. Codec support is only
+  // available in the browser, so defer WebM selection until hydration.
+  const [hasHydrated, setHasHydrated] = useState(false);
+  useEffect(() => setHasHydrated(true), []);
+  const activeAudioUrl = hasHydrated
+    ? getAudioUrlForJuz(currentJuz)
+    : currentJuz.cdnAudioUrl;
 
   // Synchronize audio element src with activeAudioUrl
   // Uses isSameAudioUrl to avoid rewriting DOM .src when URLs match, preventing

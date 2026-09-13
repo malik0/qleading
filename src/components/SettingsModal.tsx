@@ -30,6 +30,16 @@ import {
   History,
   ListOrdered,
 } from "lucide-react";
+
+type SettingsTab =
+  | "themes"
+  | "general"
+  | "rollback"
+  | "logs"
+  | "mushaf"
+  | "progress"
+  | "juz"
+  | "media";
 import { MediaDownloadsList } from "./MediaDownloadsList";
 import { RollBackContent } from "./RollBackModal";
 import { formatAudioTime } from "../lib/utils";
@@ -241,9 +251,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     userLogs,
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState<
-    "themes" | "general" | "rollback" | "logs" | "mushaf" | "progress" | "juz" | "media"
-  >("themes");
+  const [activeTab, setActiveTab] = useState("themes" as SettingsTab);
 
   React.useEffect(() => {
     if (isOpen && initialTab) {
