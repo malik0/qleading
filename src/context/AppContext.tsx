@@ -57,6 +57,11 @@ function isSameAudioUrl(src1?: string | null, src2?: string | null): boolean {
   }
 }
 
+type PendingAudioSeek = {
+  url: string;
+  position: number;
+};
+
 interface AppContextType {
   // Juz info & lists
   juzList: JuzInfo[];
@@ -227,6 +232,11 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
   const durationRef = useRef(initialDuration);
   const playbackSpeedRef = useRef<PlaybackSpeed>(1.0);
   const currentJuzRef = useRef(INITIAL_JUZ_LIST[0]);
+  // A seek cannot be relied on until the intended media source has metadata.
+  // Keep the intent separately so a late event from a previous source cannot
+  // overwrite the UI state or restart playback at zero.
+  const pendingAudioSeekRef = useRef<PendingAudioSeek | null>(null);
+  const lastPlaybackSnapshotRef = useRef(0);
 
   // Sync refs with state
   useEffect(() => {
@@ -309,11 +319,11 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
     settingsRef.current = loadedSettings;
     setPlaybackPosition(loadedState.playbackPositionSeconds || 0);
     playbackPosRef.current = loadedState.playbackPositionSeconds || 0;
-    if (audioRef.current && (loadedState.playbackPositionSeconds || 0) > 0) {
-      try {
-        audioRef.current.currentTime = loadedState.playbackPositionSeconds || 0;
-      } catch {}
-    }
+    const loadedJuz = INITIAL_JUZ_LIST.find((j) => j.id === (loadedState.currentJuzId || 1)) || INITIAL_JUZ_LIST[0];
+    pendingAudioSeekRef.current = {
+      url: getAudioUrlForJuz(loadedJuz),
+      position: loadedState.playbackPositionSeconds || 0,
+    };
     timerSecondsRef.current = loadedState.timerSeconds || loadedSettings.timerTargetMinutes * 60;
     lastActiveDateRef.current = loadedState.lastActiveDate || getLocalDateString();
 
@@ -322,8 +332,14 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data?.authenticated && data?.state) {
-          const targetPos = data.state.playbackPositionSeconds || 0;
-          const targetJuzId = data.state.currentJuzId || 1;
+          // A browser restart must not allow an older D1 snapshot to replace
+          // the more recent local checkpoint saved immediately before hiding.
+          const localUpdatedAt = new Date(loadedState.updatedAt || 0).getTime();
+          const remoteUpdatedAt = new Date(data.state.updatedAt || 0).getTime();
+          const useLocalPlayback = Number.isFinite(localUpdatedAt) && localUpdatedAt >= remoteUpdatedAt;
+          const playbackSource = useLocalPlayback ? loadedState : data.state;
+          const targetPos = playbackSource.playbackPositionSeconds || 0;
+          const targetJuzId = playbackSource.currentJuzId || 1;
 
           const mergedHistory = mergeHistoryRecords(
             loadedState.historyRecords || {},
@@ -355,6 +371,12 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
             ...data.state,
             currentJuzId: targetJuzId,
             playbackPositionSeconds: targetPos,
+            timerSeconds: playbackSource.timerSeconds ?? loadedState.timerSeconds,
+            timerTargetMinutes: playbackSource.timerTargetMinutes ?? loadedState.timerTargetMinutes,
+            lastActiveDate: playbackSource.lastActiveDate || loadedState.lastActiveDate,
+            updatedAt: playbackSource.updatedAt || loadedState.updatedAt,
+            // A restored tab is paused until the user explicitly presses Play.
+            isPlaying: false,
             historyRecords: mergedHistory,
             userLogs: mergedLogs,
             completedJuzs: mergedCompletedJuzs,
@@ -365,16 +387,12 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
           userStateRef.current = syncedState;
           saveStoredState(syncedState);
 
-          if (targetJuzId !== loadedState.currentJuzId) {
-            const targetJuz = INITIAL_JUZ_LIST.find((j) => j.id === targetJuzId) || INITIAL_JUZ_LIST[0];
-            const targetUrl = getAudioUrlForJuz(targetJuz);
-            if (audioRef.current && !isSameAudioUrl(audioRef.current.src, targetUrl)) {
-              audioRef.current.src = targetUrl;
-            }
-          }
-
-          if (audioRef.current && targetPos > 0) {
-            audioRef.current.currentTime = targetPos;
+          const targetJuz = INITIAL_JUZ_LIST.find((j) => j.id === targetJuzId) || INITIAL_JUZ_LIST[0];
+          const targetUrl = getAudioUrlForJuz(targetJuz);
+          pendingAudioSeekRef.current = { url: targetUrl, position: targetPos };
+          if (audioRef.current && !isSameAudioUrl(audioRef.current.src, targetUrl)) {
+            audioRef.current.src = targetUrl;
+            audioRef.current.load();
           }
           setPlaybackPosition(targetPos);
           playbackPosRef.current = targetPos;
@@ -440,6 +458,48 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
     ? getAudioUrlForJuz(currentJuz)
     : currentJuz.cdnAudioUrl;
 
+  const applyPendingAudioSeek = useCallback((audio: HTMLAudioElement): boolean => {
+    const pending = pendingAudioSeekRef.current;
+    if (!pending || !isSameAudioUrl(audio.src, pending.url) || audio.readyState < 1) {
+      return false;
+    }
+
+    const maxPosition =
+      Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : pending.position;
+    const position = Math.max(0, Math.min(pending.position, maxPosition));
+    try {
+      audio.currentTime = position;
+      playbackPosRef.current = position;
+      setPlaybackPosition(position);
+      pendingAudioSeekRef.current = null;
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const queueAudioSeek = useCallback(
+    (juzId: number, position: number) => {
+      const targetJuz = INITIAL_JUZ_LIST.find((j) => j.id === juzId) || INITIAL_JUZ_LIST[0];
+      const targetUrl = getAudioUrlForJuz(targetJuz);
+      const targetPosition = Math.max(0, position);
+      const audio = audioRef.current;
+
+      pendingAudioSeekRef.current = { url: targetUrl, position: targetPosition };
+      playbackPosRef.current = targetPosition;
+      setPlaybackPosition(targetPosition);
+
+      if (!audio) return;
+      if (!isSameAudioUrl(audio.src, targetUrl)) {
+        audio.src = targetUrl;
+        audio.load();
+        return;
+      }
+      applyPendingAudioSeek(audio);
+    },
+    [applyPendingAudioSeek, getAudioUrlForJuz]
+  );
+
   // Synchronize audio element src with activeAudioUrl
   // Uses isSameAudioUrl to avoid rewriting DOM .src when URLs match, preventing
   // the browser from aborting ongoing playback or resetting the media pipeline.
@@ -448,7 +508,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
     if (isTransitioningRef.current) return;
     if (!isSameAudioUrl(audioRef.current.src, activeAudioUrl)) {
       const wasPlaying = isPlayingRef.current;
-      audioRef.current.src = activeAudioUrl;
+      queueAudioSeek(currentJuz.id, playbackPosRef.current);
       const spd = playbackSpeedRef.current || playbackSpeed || 1.0;
       audioRef.current.playbackRate = spd;
       audioRef.current.defaultPlaybackRate = spd;
@@ -467,7 +527,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
         });
       }
     }
-  }, [activeAudioUrl, playbackSpeed]);
+  }, [activeAudioUrl, currentJuz.id, playbackSpeed, queueAudioSeek]);
 
   // Preload upcoming Juz audio in the background to ensure zero-latency gapless transitions
   const triggerPreloadNext = useCallback(() => {
@@ -754,19 +814,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
       const targetJuzId = point.juzId;
       const targetPos = point.playbackPositionSeconds;
       const targetTimer = point.timerSeconds;
-      const targetJuz = INITIAL_JUZ_LIST.find((j) => j.id === targetJuzId) || INITIAL_JUZ_LIST[0];
-      const targetUrl = getAudioUrlForJuz(targetJuz);
-
-      if (targetJuzId !== userStateRef.current.currentJuzId) {
-        if (audioRef.current && !isSameAudioUrl(audioRef.current.src, targetUrl)) {
-          audioRef.current.src = targetUrl;
-          audioRef.current.load();
-        }
-      }
-
-      if (audioRef.current) {
-        audioRef.current.currentTime = targetPos;
-      }
+      queueAudioSeek(targetJuzId, targetPos);
       setPlaybackPosition(targetPos);
       playbackPosRef.current = targetPos;
       timerSecondsRef.current = targetTimer;
@@ -786,7 +834,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
       setSyncNotice(`Rolled back to ${point.juzName} (${posStr}) • Big Timer ${formatHeroTimer(targetTimer)}`);
       setTimeout(() => setSyncNotice(null), 5000);
     },
-    [getAudioUrlForJuz, updateStateAndPersist, broadcastPlayback]
+    [queueAudioSeek, updateStateAndPersist, broadcastPlayback]
   );
 
   // Revert back to 15 seconds before the accident
@@ -803,19 +851,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
       };
     }
 
-    const targetJuz = INITIAL_JUZ_LIST.find((j) => j.id === targetState.juzId) || INITIAL_JUZ_LIST[0];
-    const targetUrl = getAudioUrlForJuz(targetJuz);
-
-    if (targetState.juzId !== userStateRef.current.currentJuzId) {
-      if (audioRef.current && !isSameAudioUrl(audioRef.current.src, targetUrl)) {
-        audioRef.current.src = targetUrl;
-        audioRef.current.load();
-      }
-    }
-
-    if (audioRef.current) {
-      audioRef.current.currentTime = targetState.playbackPositionSeconds;
-    }
+    queueAudioSeek(targetState.juzId, targetState.playbackPositionSeconds);
     setPlaybackPosition(targetState.playbackPositionSeconds);
     playbackPosRef.current = targetState.playbackPositionSeconds;
     timerSecondsRef.current = targetState.timerSeconds;
@@ -845,7 +881,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
     setTimeout(() => setSyncNotice(null), 5000);
   }, [
     lastAccident,
-    getAudioUrlForJuz,
+    queueAudioSeek,
     updateStateAndPersist,
     broadcastPlayback,
     saveSyncPoint,
@@ -1248,19 +1284,72 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
     };
   }, [userState.isLoggedIn, userState.userId, isSyncing, getAudioUrlForJuz]);
 
+  // Save a compact, current playback checkpoint at the last reliable lifecycle
+  // boundary. Full-state sync is too large and too easy for mobile browsers to
+  // cancel while a page is being terminated.
+  const savePlaybackSnapshot = useCallback(() => {
+    const now = Date.now();
+    if (now - lastPlaybackSnapshotRef.current < 750) return;
+    lastPlaybackSnapshotRef.current = now;
+
+    const audioPosition = audioRef.current?.currentTime;
+    const playbackPositionSeconds =
+      Number.isFinite(audioPosition) && (audioPosition || 0) >= 0
+        ? audioPosition || 0
+        : playbackPosRef.current;
+    const updatedAt = new Date(now).toISOString();
+    const snapshotState: UserState = {
+      ...userStateRef.current,
+      playbackPositionSeconds,
+      timerSeconds: timerSecondsRef.current,
+      isPlaying: isPlayingRef.current,
+      updatedAt,
+    };
+
+    userStateRef.current = snapshotState;
+    playbackPosRef.current = playbackPositionSeconds;
+    saveStoredState(snapshotState);
+
+    if (!snapshotState.isLoggedIn) return;
+
+    const payload = JSON.stringify({
+      juzId: snapshotState.currentJuzId,
+      playbackPositionSeconds,
+      timerSeconds: timerSecondsRef.current,
+      isPlaying: isPlayingRef.current,
+      deviceId: getDeviceId(),
+      updatedAt,
+    });
+    void fetch("/api/playback-snapshot", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: payload,
+      keepalive: true,
+      credentials: "same-origin",
+    }).catch(() => {
+      // Local storage is already updated synchronously; the next heartbeat can retry D1.
+    });
+  }, []);
+
   // Tab switch / page hide auto-sync
   useEffect(() => {
     if (typeof window === "undefined") return;
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === "hidden" && userStateRef.current.isLoggedIn) {
-        syncWithServer();
+        savePlaybackSnapshot();
       }
     };
 
+    const handlePageHide = () => savePlaybackSnapshot();
+
     window.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => window.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, [syncWithServer]);
+    window.addEventListener("pagehide", handlePageHide);
+    return () => {
+      window.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("pagehide", handlePageHide);
+    };
+  }, [savePlaybackSnapshot]);
 
   // Audio Playback Controls with TV Autoplay Resilience and Concurrent Pre-Play Sync
   const play = useCallback(() => {
@@ -1455,11 +1544,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
       if (Math.abs(targetSec - playbackPosRef.current) > 15) {
         recordAccident("seek_jump", "Audio Scrubber Jump");
       }
-      if (audioRef.current) {
-        audioRef.current.currentTime = targetSec;
-      }
-      setPlaybackPosition(targetSec);
-      playbackPosRef.current = targetSec;
+      queueAudioSeek(userStateRef.current.currentJuzId, targetSec);
 
       let updatedTimerSec: number | undefined = undefined;
       if (isTimerMatchedToAudioRef.current) {
@@ -1484,7 +1569,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
         ...(updatedTimerSec !== undefined ? { timerSeconds: updatedTimerSec } : {}),
       }));
     },
-    [duration, updateStateAndPersist, recordAccident]
+    [duration, updateStateAndPersist, recordAccident, queueAudioSeek]
   );
 
   const rewind = useCallback(() => {
@@ -2973,6 +3058,9 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
           updatePositionState();
         }}
         onTimeUpdate={(e) => {
+          // Ignore transient time updates (usually 0) while a new source is
+          // waiting for metadata. Otherwise they overwrite the requested seek.
+          if (pendingAudioSeekRef.current) return;
           const ct = e.currentTarget.currentTime;
           const dur = e.currentTarget.duration;
           setPlaybackPosition(ct);
@@ -2992,6 +3080,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
           }
         }}
         onCanPlay={(e) => {
+          if (applyPendingAudioSeek(e.currentTarget)) return;
           const targetPos = playbackPosRef.current;
           if (targetPos > 0 && Math.abs(e.currentTarget.currentTime - targetPos) > 0.5) {
             try {
@@ -3010,6 +3099,10 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
             e.currentTarget.playbackRate = activeSpd;
             e.currentTarget.defaultPlaybackRate = activeSpd;
           } catch {}
+          if (applyPendingAudioSeek(e.currentTarget)) {
+            updatePositionState();
+            return;
+          }
           // Restore position if restoring progress (> 0)
           const targetPos = playbackPosRef.current;
           if (targetPos > 0 && Math.abs(e.currentTarget.currentTime - targetPos) > 0.5) {

@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useApp } from "../context/AppContext";
+import type { AyahMarker } from "../types/quran";
 import {
   fetchVerseData,
   preloadVerses,
@@ -27,6 +28,79 @@ interface MushafModalProps {
   onOpenSettings?: () => void;
 }
 
+// Render the next Ayah slightly ahead of its spoken marker to absorb browser
+// paint/layout latency. Keep this small enough that the display never feels
+// perceptibly ahead of the recitation.
+const MUSHAF_DISPLAY_LEAD_SECONDS = 0.08;
+
+type TextRange = { start: number; end: number };
+
+function findTextRanges(text: string, expression: RegExp): TextRange[] {
+  const ranges: TextRange[] = [];
+  for (const match of text.matchAll(expression)) {
+    if (match.index !== undefined) {
+      ranges.push({ start: match.index, end: match.index + match[0].length });
+    }
+  }
+  return ranges;
+}
+
+function includesPosition(ranges: TextRange[], position: number): boolean {
+  return ranges.some((range) => position >= range.start && position < range.end);
+}
+
+function renderTranslationText(text: string): React.ReactNode[] {
+  const fadedRanges = findTextRanges(text, /\[[^\]]*\]|\([^)]*\)|--[\s\S]*?--|⌜[^⌝]*⌝/g);
+  const quotedRanges = findTextRanges(text, /“[^”]*”|"[^"]*"|‘[^’]*’|'[^']*'/g);
+  const divineNameRanges = findTextRanges(text, /\b(?:Allah|God|Allāh|Lord)\b/g);
+  const breakpoints = new Set<number>([0, text.length]);
+
+  for (const range of [...fadedRanges, ...quotedRanges, ...divineNameRanges]) {
+    breakpoints.add(range.start);
+    breakpoints.add(range.end);
+  }
+
+  const points = [...breakpoints].sort((a, b) => a - b);
+  return points.slice(0, -1).map((start, index) => {
+    const end = points[index + 1];
+    const midpoint = start + (end - start) / 2;
+    const isFaded = includesPosition(fadedRanges, midpoint);
+    const isQuoted = includesPosition(quotedRanges, midpoint);
+    const isDivineName = includesPosition(divineNameRanges, midpoint);
+    const className = [
+      isFaded ? "text-content-muted opacity-65" : "",
+      isQuoted ? "font-bold" : "",
+      isDivineName ? "font-bold italic underline underline-offset-2" : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    return (
+      <span key={`${start}-${end}`} className={className || undefined}>
+        {text.slice(start, end)}
+      </span>
+    );
+  });
+}
+
+function getMarkerIndexAtTime(markers: AyahMarker[], position: number): number {
+  let low = 0;
+  let high = markers.length - 1;
+
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+    const marker = markers[mid];
+    if (position < marker.startTime) {
+      high = mid - 1;
+    } else if (position >= marker.endTime) {
+      low = mid + 1;
+    } else {
+      return mid;
+    }
+  }
+  return Math.max(0, Math.min(markers.length - 1, high));
+}
+
 export const MushafModal: React.FC<MushafModalProps> = ({
   isOpen,
   onClose,
@@ -36,6 +110,7 @@ export const MushafModal: React.FC<MushafModalProps> = ({
     currentMarker,
     currentMarkers,
     currentMarkerIndex,
+    audioRef,
     seekToMarker,
     isPlaying,
     isSyncing,
@@ -47,50 +122,78 @@ export const MushafModal: React.FC<MushafModalProps> = ({
   const [verseData, setVerseData] = useState<QuranVerseData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [displayedMarkerIndex, setDisplayedMarkerIndex] = useState(currentMarkerIndex);
+  const verseRequestRef = useRef(0);
 
   const translationId = settings.mushafTranslationId ?? 20;
   const scriptType = settings.mushafScript ?? "uthmani";
   const arabicFont = settings.mushafArabicFont ?? (scriptType === "indopak" ? "noto-nastaliq" : "amiri-quran");
   const arabicFontSize = settings.mushafArabicFontSize ?? 28;
   const translationFontSize = settings.mushafTranslationFontSize ?? 16;
+  const displayedMarker = currentMarkers[displayedMarkerIndex] || currentMarker;
 
-  // Load verse text whenever currentMarker or translationId changes while modal is open
+  // `timeupdate` is intentionally low-frequency. While the Mushaf is open,
+  // sample the media clock per animation frame so the page changes with the
+  // first rendered frame of its Ayah rather than the next timeupdate event.
+  useEffect(() => {
+    if (!isOpen || currentMarkers.length === 0) return;
+
+    let frameId: number | null = null;
+    const syncMarker = () => {
+      const position = audioRef.current?.currentTime;
+      const nextIndex =
+        Number.isFinite(position) && position !== undefined
+          ? getMarkerIndexAtTime(currentMarkers, position + MUSHAF_DISPLAY_LEAD_SECONDS)
+          : currentMarkerIndex;
+      setDisplayedMarkerIndex((previous) => (previous === nextIndex ? previous : nextIndex));
+      if (isPlaying) frameId = window.requestAnimationFrame(syncMarker);
+    };
+
+    syncMarker();
+    return () => {
+      if (frameId !== null) window.cancelAnimationFrame(frameId);
+    };
+  }, [audioRef, currentMarkerIndex, currentMarkers, isOpen, isPlaying]);
+
+  // Load verse text whenever the displayed Ayah or translation changes.
   const loadVerse = useCallback(async () => {
-    if (!currentMarker) return;
+    if (!displayedMarker) return;
+    const requestId = ++verseRequestRef.current;
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchVerseData(
-        currentMarker.surahNumber,
-        currentMarker.ayahNumber,
-        translationId
-      );
-      setVerseData(data);
-
-      // Preload next and previous verses for zero-latency page transitions (QL008)
+      // Begin preloading before awaiting the displayed verse. This gives the
+      // next Ayah its full current-Ayah duration to enter the cache.
       const targetsToPreload: Array<{ surahNumber: number; ayahNumber: number }> = [];
-      if (currentMarkerIndex < currentMarkers.length - 1) {
-        const next1 = currentMarkers[currentMarkerIndex + 1];
+      if (displayedMarkerIndex < currentMarkers.length - 1) {
+        const next1 = currentMarkers[displayedMarkerIndex + 1];
         targetsToPreload.push({ surahNumber: next1.surahNumber, ayahNumber: next1.ayahNumber });
       }
-      if (currentMarkerIndex < currentMarkers.length - 2) {
-        const next2 = currentMarkers[currentMarkerIndex + 2];
+      if (displayedMarkerIndex < currentMarkers.length - 2) {
+        const next2 = currentMarkers[displayedMarkerIndex + 2];
         targetsToPreload.push({ surahNumber: next2.surahNumber, ayahNumber: next2.ayahNumber });
       }
-      if (currentMarkerIndex > 0) {
-        const prev1 = currentMarkers[currentMarkerIndex - 1];
+      if (displayedMarkerIndex > 0) {
+        const prev1 = currentMarkers[displayedMarkerIndex - 1];
         targetsToPreload.push({ surahNumber: prev1.surahNumber, ayahNumber: prev1.ayahNumber });
       }
-      if (targetsToPreload.length > 0) {
-        preloadVerses(targetsToPreload, translationId);
-      }
+      if (targetsToPreload.length > 0) preloadVerses(targetsToPreload, translationId);
+
+      const data = await fetchVerseData(
+        displayedMarker.surahNumber,
+        displayedMarker.ayahNumber,
+        translationId
+      );
+      if (requestId === verseRequestRef.current) setVerseData(data);
     } catch (err: unknown) {
       console.error("Failed to load verse data:", err);
-      setError("Unable to load verse text. Please check your internet connection and try again.");
+      if (requestId === verseRequestRef.current) {
+        setError("Unable to load verse text. Please check your internet connection and try again.");
+      }
     } finally {
-      setLoading(false);
+      if (requestId === verseRequestRef.current) setLoading(false);
     }
-  }, [currentMarker, currentMarkerIndex, currentMarkers, translationId]);
+  }, [currentMarkers, displayedMarker, displayedMarkerIndex, translationId]);
 
   useEffect(() => {
     if (isOpen) {
@@ -128,14 +231,14 @@ export const MushafModal: React.FC<MushafModalProps> = ({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, onClose]);
 
-  if (!isOpen || !currentMarker) return null;
+  if (!isOpen || !displayedMarker) return null;
 
-  const hasPrev = currentMarkerIndex > 0;
-  const hasNext = currentMarkerIndex < currentMarkers.length - 1;
+  const hasPrev = displayedMarkerIndex > 0;
+  const hasNext = displayedMarkerIndex < currentMarkers.length - 1;
 
   // Format verse number for Quran.com link, e.g. 114:03 or 12:05
-  const formattedAyah = String(currentMarker.ayahNumber).padStart(2, "0");
-  const verseParam = `${currentMarker.surahNumber}:${formattedAyah}`;
+  const formattedAyah = String(displayedMarker.ayahNumber).padStart(2, "0");
+  const verseParam = `${displayedMarker.surahNumber}:${formattedAyah}`;
   const quranComUrl = `https://quran.com/${verseParam}`;
 
   // Select script text: IndoPak or Uthmani
@@ -167,10 +270,10 @@ export const MushafModal: React.FC<MushafModalProps> = ({
               id="mushaf-modal-title"
               className="text-base sm:text-lg font-bold text-content-primary truncate"
             >
-              {currentMarker.surahName}
+              {displayedMarker.surahName}
             </h3>
             <span className="px-2.5 py-0.5 rounded-md bg-brand-primary/10 text-brand-primary font-mono font-bold text-xs border border-brand-primary/20 shrink-0">
-              {currentMarker.surahNumber}:{currentMarker.ayahNumber}
+              {displayedMarker.surahNumber}:{displayedMarker.ayahNumber}
             </span>
           </div>
 
@@ -241,9 +344,9 @@ export const MushafModal: React.FC<MushafModalProps> = ({
                   {arabicText}
                   <span
                     className="inline-flex items-center justify-center mx-2 select-none align-middle font-mono font-bold text-brand-primary text-sm opacity-90"
-                    title={`Ayah ${currentMarker.ayahNumber}`}
+                    title={`Ayah ${displayedMarker.ayahNumber}`}
                   >
-                    ﴿{currentMarker.ayahNumber}﴾
+                    ﴿{displayedMarker.ayahNumber}﴾
                   </span>
                 </div>
               </div>
@@ -254,7 +357,7 @@ export const MushafModal: React.FC<MushafModalProps> = ({
                   className="text-content-secondary leading-relaxed select-text font-normal transition-all"
                   style={{ fontSize: `${translationFontSize}px` }}
                 >
-                  {verseData?.translationText || "No translation text available."}
+                  {renderTranslationText(verseData?.translationText || "No translation text available.")}
                 </div>
 
                 {/* Translator Selector Box with Left/Right Arrows (QL011) */}
@@ -307,9 +410,9 @@ export const MushafModal: React.FC<MushafModalProps> = ({
           {/* Previous Ayah Button */}
           <button
             type="button"
-            onClick={() => hasPrev && seekToMarker(currentMarkerIndex - 1)}
+            onClick={() => hasPrev && seekToMarker(displayedMarkerIndex - 1)}
             disabled={!hasPrev}
-            title={hasPrev ? `Previous: ${currentMarkers[currentMarkerIndex - 1]?.title}` : "First Ayah of Juz"}
+            title={hasPrev ? `Previous: ${currentMarkers[displayedMarkerIndex - 1]?.title}` : "First Ayah of Juz"}
             aria-label="Previous Ayah"
             className="flex items-center gap-1 px-3 py-2 rounded-xl bg-surface-card hover:bg-surface-hover border border-surface-border text-xs font-semibold text-content-secondary hover:text-content-primary disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer shrink-0"
           >
@@ -347,9 +450,9 @@ export const MushafModal: React.FC<MushafModalProps> = ({
           {/* Next Ayah Button */}
           <button
             type="button"
-            onClick={() => hasNext && seekToMarker(currentMarkerIndex + 1)}
+            onClick={() => hasNext && seekToMarker(displayedMarkerIndex + 1)}
             disabled={!hasNext}
-            title={hasNext ? `Next: ${currentMarkers[currentMarkerIndex + 1]?.title}` : "End of Juz"}
+            title={hasNext ? `Next: ${currentMarkers[displayedMarkerIndex + 1]?.title}` : "End of Juz"}
             aria-label="Next Ayah"
             className="flex items-center gap-1 px-3 py-2 rounded-xl bg-surface-card hover:bg-surface-hover border border-surface-border text-xs font-semibold text-content-secondary hover:text-content-primary disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer shrink-0"
           >

@@ -2,6 +2,7 @@ import { MushafArabicFont, MushafScript, QuranTranslationOption } from "../types
 
 export const QURAN_TRANSLATIONS: QuranTranslationOption[] = [
   { id: 20, name: "Saheeh International", author: "Saheeh International", shortLabel: "Saheeh Int. (Default)" },
+  { id: 131, name: "The Clear Quran", author: "Mustafa Khattab", shortLabel: "The Clear Quran (Mustafa Khattab)" },
   { id: 85, name: "M.A.S. Abdel Haleem", author: "M.A.S. Abdel Haleem", shortLabel: "Abdel Haleem (Oxford)" },
   { id: 84, name: "Mufti Taqi Usmani", author: "Mufti Taqi Usmani", shortLabel: "Taqi Usmani" },
   { id: 19, name: "Mohammed Pickthall", author: "Mohammed Marmaduke William Pickthall", shortLabel: "Pickthall" },
@@ -92,6 +93,62 @@ export function getFontFamilyForOption(fontId?: MushafArabicFont): string {
 // In-memory cache to prevent redundant network requests
 const verseCache = new Map<string, QuranVerseData>();
 
+const CLEAR_QURAN_SOURCE_URL =
+  "https://raw.githubusercontent.com/UmmahLibrary/ummah-library/main/packages/data/datasets/translations/eng-khattab.json";
+
+interface ClearQuranSource {
+  verses?: Array<{ sura?: number; aya?: number; text?: string }>;
+}
+
+let clearQuranTranslationsPromise: Promise<Map<string, string>> | undefined;
+
+/**
+ * Quran.com's legacy verse endpoint now returns Arabic text without translations.
+ * Keep a cached copy of the Clear Quran available for translation ID 131.
+ */
+async function getClearQuranTranslations(): Promise<Map<string, string>> {
+  if (!clearQuranTranslationsPromise) {
+    clearQuranTranslationsPromise = fetch(CLEAR_QURAN_SOURCE_URL)
+      .then(async (res) => {
+        if (!res.ok) {
+          throw new Error(`Clear Quran source error: ${res.status}`);
+        }
+
+        const source = (await res.json()) as ClearQuranSource;
+        const translations = new Map<string, string>();
+        for (const verse of source.verses ?? []) {
+          if (verse.sura && verse.aya && verse.text) {
+            translations.set(`${verse.sura}:${verse.aya}`, cleanTranslationText(verse.text));
+          }
+        }
+
+        if (translations.size === 0) {
+          throw new Error("Clear Quran source contained no verses");
+        }
+        return translations;
+      })
+      .catch((error) => {
+        // Permit a retry if a transient network failure prevents the initial load.
+        clearQuranTranslationsPromise = undefined;
+        throw error;
+      });
+  }
+
+  return clearQuranTranslationsPromise;
+}
+
+async function getTranslationText(
+  verseKey: string,
+  translationId: number,
+  apiText?: string
+): Promise<string> {
+  const text = cleanTranslationText(apiText);
+  if (text || translationId !== 131) return text;
+
+  const clearQuranTranslations = await getClearQuranTranslations();
+  return clearQuranTranslations.get(verseKey) ?? "";
+}
+
 /**
  * Fetches Quranic Arabic text (Uthmani + IndoPak) and English translation from Quran.com API v4
  */
@@ -119,8 +176,7 @@ export async function fetchVerseData(
       throw new Error("Verse not found in response");
     }
 
-    const rawTrans = verse.translations?.[0]?.text || "";
-    const cleanTrans = cleanTranslationText(rawTrans);
+    const cleanTrans = await getTranslationText(verseKey, translationId, verse.translations?.[0]?.text);
     const transMeta = QURAN_TRANSLATIONS.find((t) => t.id === translationId);
 
     const data: QuranVerseData = {
@@ -185,4 +241,3 @@ export function preloadVerses(
     }
   }
 }
-
