@@ -309,6 +309,11 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
     settingsRef.current = loadedSettings;
     setPlaybackPosition(loadedState.playbackPositionSeconds || 0);
     playbackPosRef.current = loadedState.playbackPositionSeconds || 0;
+    if (audioRef.current && (loadedState.playbackPositionSeconds || 0) > 0) {
+      try {
+        audioRef.current.currentTime = loadedState.playbackPositionSeconds || 0;
+      } catch {}
+    }
     timerSecondsRef.current = loadedState.timerSeconds || loadedSettings.timerTargetMinutes * 60;
     lastActiveDateRef.current = loadedState.lastActiveDate || getLocalDateString();
 
@@ -1256,6 +1261,14 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
     const audio = audioRef.current;
     if (!audio) return;
 
+    // Ensure audio element restores preserved position when resuming playback after refresh or rollback
+    const targetPos = playbackPosRef.current;
+    if (targetPos > 0 && Math.abs(audio.currentTime - targetPos) > 0.5) {
+      try {
+        audio.currentTime = targetPos;
+      } catch {}
+    }
+
     // 1. Ensure audio element is unmuted and volume is at maximum
     audio.muted = false;
     audio.volume = 1.0;
@@ -1454,7 +1467,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
             ? durationRef.current
             : currentJuzRef.current.approxDurationSeconds || 2776;
         const spd = playbackSpeedRef.current || 1.0;
-        const adjustedLeft = Math.max(0, Math.round((curDur - targetSec) / spd));
+        const adjustedLeft = Math.max(0, Math.floor((curDur - targetSec) / spd));
         timerSecondsRef.current = adjustedLeft;
         updatedTimerSec = adjustedLeft;
       }
@@ -1732,8 +1745,8 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
         ? audioRef.current.currentTime
         : playbackPosRef.current || 0;
 
-    const rawTimeLeft = Math.max(0, Math.round(curDur - curPos));
-    const adjustedTimeLeft = Math.round(rawTimeLeft / spd);
+    const rawTimeLeft = Math.max(0, curDur - curPos);
+    const adjustedTimeLeft = Math.floor(rawTimeLeft / spd);
 
     recordAccident(
       "timer_reset",
@@ -1814,7 +1827,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
             ? durationRef.current
             : currentJuzRef.current.approxDurationSeconds || 2776;
         const spd = playbackSpeedRef.current || 1.0;
-        nextTimerSec = Math.max(0, Math.round((curDur - currentPos) / spd));
+        nextTimerSec = Math.max(0, Math.floor((curDur - currentPos) / spd));
       } else {
         // Standard countdown rate: strictly 1 second per real-time second regardless of playback speed
         nextTimerSec = nextTimerSec - 1;
@@ -2958,11 +2971,26 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
           const dur = e.currentTarget.duration;
           setPlaybackPosition(ct);
           playbackPosRef.current = ct;
+          if (isTimerMatchedToAudioRef.current) {
+            const curDur = dur && !isNaN(dur) && isFinite(dur) && dur > 0 ? dur : durationRef.current;
+            const spd = playbackSpeedRef.current || 1.0;
+            const syncTimer = Math.max(0, Math.floor((curDur - ct) / spd));
+            timerSecondsRef.current = syncTimer;
+            setUserState((prev) => (prev.timerSeconds === syncTimer ? prev : { ...prev, timerSeconds: syncTimer }));
+          }
           if (dur && isFinite(dur) && dur > 60 && ct >= dur - 60) {
             triggerPreloadNext();
           }
           if (dur && isFinite(dur) && dur > 5 && ct >= dur - 0.3) {
             handleAudioEnded();
+          }
+        }}
+        onCanPlay={(e) => {
+          const targetPos = playbackPosRef.current;
+          if (targetPos > 0 && Math.abs(e.currentTarget.currentTime - targetPos) > 0.5) {
+            try {
+              e.currentTarget.currentTime = targetPos;
+            } catch {}
           }
         }}
         onLoadedMetadata={(e) => {
@@ -2978,7 +3006,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
           } catch {}
           // Restore position if restoring progress (> 0)
           const targetPos = playbackPosRef.current;
-          if (targetPos > 0 && Math.abs(e.currentTarget.currentTime - targetPos) > 1) {
+          if (targetPos > 0 && Math.abs(e.currentTarget.currentTime - targetPos) > 0.5) {
             try {
               e.currentTarget.currentTime = targetPos;
             } catch {}

@@ -37,7 +37,7 @@ export const PlaybackControls: React.FC = () => {
   } = useApp();
 
   const rawRemaining = Math.max(0, (duration || 0) - (playbackPosition || 0));
-  const adjustedRemaining = Math.round(rawRemaining / (playbackSpeed || 1.0));
+  const adjustedRemaining = Math.floor(rawRemaining / (playbackSpeed || 1.0));
   const audioTimeFormatted = formatAudioTime(adjustedRemaining);
 
   return (

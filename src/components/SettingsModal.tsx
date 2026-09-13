@@ -27,14 +27,18 @@ import {
   Plus,
   ArrowUp,
   BookOpen,
+  History,
+  ListOrdered,
 } from "lucide-react";
 import { MediaDownloadsList } from "./MediaDownloadsList";
+import { RollBackContent } from "./RollBackModal";
+import { formatAudioTime } from "../lib/utils";
 import { ARABIC_FONT_OPTIONS, QURAN_TRANSLATIONS, getFontFamilyForOption } from "../lib/quranApi";
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  initialTab?: "themes" | "general" | "mushaf" | "progress" | "juz" | "media";
+  initialTab?: "themes" | "general" | "rollback" | "logs" | "mushaf" | "progress" | "juz" | "media";
 }
 
 export type ThemeCategory = "all" | "quranic" | "modern" | "contrast";
@@ -234,10 +238,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setTallyAndStreakProgressManually,
     historyRecords,
     todayRecord,
+    userLogs,
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<
-    "themes" | "general" | "mushaf" | "progress" | "juz" | "media"
+    "themes" | "general" | "rollback" | "logs" | "mushaf" | "progress" | "juz" | "media"
   >("themes");
 
   React.useEffect(() => {
@@ -249,7 +254,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   React.useEffect(() => {
     const handleOpenSettings = (e: Event) => {
       const customEvent = e as CustomEvent<{
-        tab?: "themes" | "general" | "mushaf" | "progress" | "juz" | "media";
+        tab?: "themes" | "general" | "rollback" | "logs" | "mushaf" | "progress" | "juz" | "media";
       }>;
       if (customEvent.detail?.tab) {
         setActiveTab(customEvent.detail.tab);
@@ -431,6 +436,28 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               }`}
             >
               <span>General & Playback</span>
+            </button>
+            <button
+              onClick={() => setActiveTab("rollback")}
+              className={`py-1.5 sm:py-2 px-3 sm:px-4 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0 ${
+                activeTab === "rollback"
+                  ? "bg-brand-primary text-white shadow-sm font-bold"
+                  : "bg-surface-card hover:bg-surface-hover text-content-secondary hover:text-content-primary border border-surface-border"
+              }`}
+            >
+              <History className="w-4 h-4" />
+              <span>Roll Back</span>
+            </button>
+            <button
+              onClick={() => setActiveTab("logs")}
+              className={`py-1.5 sm:py-2 px-3 sm:px-4 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0 ${
+                activeTab === "logs"
+                  ? "bg-brand-primary text-white shadow-sm font-bold"
+                  : "bg-surface-card hover:bg-surface-hover text-content-secondary hover:text-content-primary border border-surface-border"
+              }`}
+            >
+              <ListOrdered className="w-4 h-4" />
+              <span>Reading Logs</span>
             </button>
             <button
               onClick={() => setActiveTab("mushaf")}
@@ -990,6 +1017,73 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   />
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* TAB: ROLL BACK & ACCIDENT UNDO (QL016) */}
+          {activeTab === "rollback" && (
+            <div className="space-y-4 animate-fadeIn">
+              <RollBackContent onRollbackComplete={onClose} />
+            </div>
+          )}
+
+          {/* TAB: READING LOGS (QL016) */}
+          {activeTab === "logs" && (
+            <div className="space-y-4 animate-fadeIn">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-bold text-content-primary">Listening &amp; Reading History</h4>
+                  <p className="text-xs text-content-muted">
+                    Chronological record of all completed listening sessions and Juz progress
+                  </p>
+                </div>
+                <span className="text-xs font-mono font-semibold px-2.5 py-1 rounded-xl bg-brand-light text-brand-primary border border-brand-primary/20">
+                  {userLogs.length} session{userLogs.length === 1 ? "" : "s"}
+                </span>
+              </div>
+
+              {userLogs.length === 0 ? (
+                <div className="text-center py-12 text-content-muted text-sm bg-surface-subtle/50 rounded-2xl border border-surface-border p-6 space-y-2">
+                  <ListOrdered className="w-8 h-8 mx-auto text-content-muted/50" />
+                  <p className="font-semibold text-content-primary">No reading logs recorded yet</p>
+                  <p className="text-xs">Start listening to audio to build your reading history!</p>
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-[460px] overflow-y-auto pr-1">
+                  {userLogs.map((log) => {
+                    const dateFormatted = new Date(log.timestamp).toLocaleString("en-US", {
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                    });
+
+                    return (
+                      <div
+                        key={log.id}
+                        className="p-3.5 rounded-2xl bg-surface-subtle hover:bg-surface-hover border border-surface-border flex items-center justify-between text-xs transition shadow-xs"
+                      >
+                        <div className="space-y-1">
+                          <span className="font-bold text-content-primary block text-sm">
+                            {log.juzName}
+                          </span>
+                          <span className="text-content-muted text-[11px] flex items-center gap-1.5">
+                            <Calendar className="w-3.5 h-3.5 text-brand-primary" />
+                            {dateFormatted}
+                          </span>
+                        </div>
+
+                        <div className="text-right font-mono">
+                          <span className="text-brand-primary font-bold text-sm block">
+                            {formatAudioTime(log.durationSeconds)}
+                          </span>
+                          <span className="text-[10px] text-content-muted font-semibold">
+                            {log.playbackSpeed}x speed
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 

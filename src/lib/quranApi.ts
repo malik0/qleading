@@ -171,3 +171,18 @@ export async function fetchVerseData(
   }
 }
 
+/**
+ * Preload and cache upcoming/previous verses in background for zero-latency page turns
+ */
+export function preloadVerses(
+  targets: Array<{ surahNumber: number; ayahNumber: number }>,
+  translationId: number = 20
+): void {
+  for (const t of targets) {
+    const cacheKey = `${t.surahNumber}:${t.ayahNumber}:${translationId}`;
+    if (!verseCache.has(cacheKey)) {
+      fetchVerseData(t.surahNumber, t.ayahNumber, translationId).catch(() => {});
+    }
+  }
+}
+

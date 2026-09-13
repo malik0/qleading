@@ -84,9 +84,9 @@ export const TimerModal: React.FC<TimerModalProps> = ({ isOpen, onClose }) => {
   const speed = playbackSpeed || 1.0;
   const rawTimeLeftInAudio = Math.max(
     0,
-    Math.round((duration || 0) - (playbackPosition || 0))
+    (duration || 0) - (playbackPosition || 0)
   );
-  const timeLeftInAudio = Math.round(rawTimeLeftInAudio / speed);
+  const timeLeftInAudio = Math.floor(rawTimeLeftInAudio / speed);
   const audioTimeFormatted = formatAudioTime(timeLeftInAudio);
 
   // Match Audio Handler: Sets the timer to adjusted time left in audio
@@ -97,13 +97,15 @@ export const TimerModal: React.FC<TimerModalProps> = ({ isOpen, onClose }) => {
     setManualMinutes(mins);
     setManualSeconds(secs);
     setApplyToCurrent(false);
-    setTimerSeconds(timeLeft);
     setSuccessMessage(
-      `Matched audio: ${formatHeroTimer(timeLeft)} left in ${juzName}${activeSpeed !== 1.0 ? ` (${activeSpeed}x speed)` : ""}`
+      `Big Timer matched to audio (${formatAudioTime(timeLeft)}${
+        activeSpeed !== 1.0 ? ` at ${activeSpeed}x` : ""
+      })`
     );
     setTimeout(() => {
       setSuccessMessage(null);
-    }, 3000);
+      onClose();
+    }, 1200);
   };
 
   // Apply Manual Edit to active timer

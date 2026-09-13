@@ -95,8 +95,8 @@ export const JuzDisplay: React.FC = () => {
 
   // Time remaining adjusted for playback speed (Requirement 1.3)
   const rawRemainingSeconds = Math.max(0, duration - playbackPosition);
-  const adjustedRemainingSeconds = rawRemainingSeconds / playbackSpeed;
-  const adjustedElapsedSeconds = playbackPosition / playbackSpeed;
+  const adjustedRemainingSeconds = Math.floor(rawRemainingSeconds / playbackSpeed);
+  const adjustedElapsedSeconds = Math.floor(playbackPosition / playbackSpeed);
 
   // Remaining timer seconds until daily target
   const remainingTimerSeconds = Math.max(0, timerSeconds);

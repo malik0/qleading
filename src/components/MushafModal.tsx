@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useApp } from "../context/AppContext";
 import {
   fetchVerseData,
+  preloadVerses,
   getFontFamilyForOption,
   QuranVerseData,
   QURAN_TRANSLATIONS,
@@ -17,8 +18,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Sliders,
-  BookOpen,
-  Volume2,
   AlertCircle,
 } from "lucide-react";
 
@@ -42,6 +41,7 @@ export const MushafModal: React.FC<MushafModalProps> = ({
     isSyncing,
     togglePlay,
     settings,
+    updateSettings,
   } = useApp();
 
   const [verseData, setVerseData] = useState<QuranVerseData | null>(null);
@@ -66,19 +66,55 @@ export const MushafModal: React.FC<MushafModalProps> = ({
         translationId
       );
       setVerseData(data);
+
+      // Preload next and previous verses for zero-latency page transitions (QL008)
+      const targetsToPreload: Array<{ surahNumber: number; ayahNumber: number }> = [];
+      if (currentMarkerIndex < currentMarkers.length - 1) {
+        const next1 = currentMarkers[currentMarkerIndex + 1];
+        targetsToPreload.push({ surahNumber: next1.surahNumber, ayahNumber: next1.ayahNumber });
+      }
+      if (currentMarkerIndex < currentMarkers.length - 2) {
+        const next2 = currentMarkers[currentMarkerIndex + 2];
+        targetsToPreload.push({ surahNumber: next2.surahNumber, ayahNumber: next2.ayahNumber });
+      }
+      if (currentMarkerIndex > 0) {
+        const prev1 = currentMarkers[currentMarkerIndex - 1];
+        targetsToPreload.push({ surahNumber: prev1.surahNumber, ayahNumber: prev1.ayahNumber });
+      }
+      if (targetsToPreload.length > 0) {
+        preloadVerses(targetsToPreload, translationId);
+      }
     } catch (err: unknown) {
       console.error("Failed to load verse data:", err);
       setError("Unable to load verse text. Please check your internet connection and try again.");
     } finally {
       setLoading(false);
     }
-  }, [currentMarker, translationId]);
+  }, [currentMarker, currentMarkerIndex, currentMarkers, translationId]);
 
   useEffect(() => {
     if (isOpen) {
       loadVerse();
     }
   }, [isOpen, loadVerse]);
+
+  // Translator cycling handlers (QL011)
+  const currentTransIndex = Math.max(
+    0,
+    QURAN_TRANSLATIONS.findIndex((t) => t.id === translationId)
+  );
+
+  const handlePrevTranslation = () => {
+    const prevIdx =
+      currentTransIndex > 0 ? currentTransIndex - 1 : QURAN_TRANSLATIONS.length - 1;
+    updateSettings({ mushafTranslationId: QURAN_TRANSLATIONS[prevIdx].id });
+  };
+
+  const handleNextTranslation = () => {
+    const nextIdx =
+      currentTransIndex < QURAN_TRANSLATIONS.length - 1 ? currentTransIndex + 1 : 0;
+    updateSettings({ mushafTranslationId: QURAN_TRANSLATIONS[nextIdx].id });
+  };
 
   // Handle ESC key to close
   useEffect(() => {
@@ -123,50 +159,23 @@ export const MushafModal: React.FC<MushafModalProps> = ({
 
       {/* Modal Container */}
       <div className="relative z-10 bg-surface-card border border-surface-border rounded-2xl sm:rounded-3xl max-w-2xl w-full max-h-[92dvh] sm:max-h-[90vh] flex flex-col shadow-2xl overflow-hidden transition-colors duration-200 animate-slideUp">
-        {/* Header */}
+        {/* Header (Book icon, Ayah location text, and subtitle removed per QL012, QL013, QL014) */}
         <div className="flex items-center justify-between p-3.5 sm:p-5 border-b border-surface-border bg-surface-subtle/40 shrink-0">
           {/* Left: Title & Ayah Badge */}
-          <div className="flex items-center gap-2.5 min-w-0 pr-2">
-            <div className="p-2 sm:p-2.5 rounded-xl bg-brand-light text-brand-primary shrink-0">
-              <BookOpen className="w-5 h-5" />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h3
-                  id="mushaf-modal-title"
-                  className="text-base sm:text-lg font-bold text-content-primary truncate"
-                >
-                  {currentMarker.surahName}
-                </h3>
-                <span className="px-2 py-0.5 rounded-md bg-brand-primary/10 text-brand-primary font-mono font-bold text-xs border border-brand-primary/20 shrink-0">
-                  {currentMarker.surahNumber}:{currentMarker.ayahNumber}
-                </span>
-                {currentMarkerIndex >= 0 && (
-                  <span className="text-[11px] font-medium text-content-muted hidden sm:inline-block">
-                    (Ayah {currentMarkerIndex + 1} of {currentMarkers.length} in this Juz)
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-content-muted truncate">
-                Mushaf recitation &amp; English translation
-              </p>
-            </div>
+          <div className="flex items-center gap-2 flex-wrap min-w-0 pr-2">
+            <h3
+              id="mushaf-modal-title"
+              className="text-base sm:text-lg font-bold text-content-primary truncate"
+            >
+              {currentMarker.surahName}
+            </h3>
+            <span className="px-2.5 py-0.5 rounded-md bg-brand-primary/10 text-brand-primary font-mono font-bold text-xs border border-brand-primary/20 shrink-0">
+              {currentMarker.surahNumber}:{currentMarker.ayahNumber}
+            </span>
           </div>
 
-          {/* Right: Actions (Quran.com link, Settings, Close) */}
+          {/* Right: Actions (Settings, Close) - Quran.com link moved to bottom per QL009 */}
           <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-            {/* Direct Link out to Quran.com */}
-            <a
-              href={quranComUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              title={`Open ${verseParam} on Quran.com`}
-              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-brand-light hover:bg-brand-primary hover:text-white text-brand-primary font-medium text-xs border border-brand-primary/20 transition shadow-xs cursor-pointer"
-            >
-              <span className="font-mono font-semibold">Quran.com/{verseParam}</span>
-              <ExternalLink className="w-3.5 h-3.5 shrink-0" />
-            </a>
-
             {/* Quick Settings Shortcut */}
             {onOpenSettings && (
               <button
@@ -217,7 +226,7 @@ export const MushafModal: React.FC<MushafModalProps> = ({
             </div>
           ) : (
             <div className="space-y-6">
-              {/* Arabic Quranic Script */}
+              {/* Arabic Quranic Script (Horizontal rule and Script/Font info removed per QL015) */}
               <div className="p-5 sm:p-7 rounded-2xl sm:rounded-3xl bg-surface-subtle/50 border border-surface-border/80 shadow-inner transition-colors duration-200">
                 <div
                   dir="rtl"
@@ -237,31 +246,56 @@ export const MushafModal: React.FC<MushafModalProps> = ({
                     ﴿{currentMarker.ayahNumber}﴾
                   </span>
                 </div>
-
-                <div className="mt-3 flex items-center justify-between text-[11px] text-content-muted border-t border-surface-border/60 pt-2.5">
-                  <span className="capitalize font-medium">
-                    Script: {scriptType === "indopak" ? "Indo-Pak (Nastaliq)" : "Uthmani (Madinah)"}
-                  </span>
-                  <span className="font-medium">
-                    Font: {arabicFont.replace("-", " ")} ({arabicFontSize}px)
-                  </span>
-                </div>
               </div>
 
-              {/* English Translation */}
-              <div className="space-y-2 px-1">
-                <div className="flex items-center justify-between text-xs font-bold text-content-muted uppercase tracking-wider">
-                  <span>English Translation</span>
-                  <span className="text-[11px] text-brand-primary font-semibold lowercase">
-                    {activeTranslation ? activeTranslation.name : "Saheeh International"}
-                  </span>
-                </div>
-
+              {/* Translation Content (English Translation label removed per QL010) */}
+              <div className="space-y-4 px-1">
                 <div
                   className="text-content-secondary leading-relaxed select-text font-normal transition-all"
                   style={{ fontSize: `${translationFontSize}px` }}
                 >
                   {verseData?.translationText || "No translation text available."}
+                </div>
+
+                {/* Translator Selector Box with Left/Right Arrows (QL011) */}
+                <div className="flex items-center justify-between p-2.5 sm:p-3 rounded-2xl bg-surface-subtle/80 border border-surface-border shadow-xs">
+                  <button
+                    type="button"
+                    onClick={handlePrevTranslation}
+                    title="Previous translator"
+                    aria-label="Previous translator"
+                    className="p-1.5 rounded-xl bg-surface-card hover:bg-surface-hover border border-surface-border text-content-secondary hover:text-content-primary transition cursor-pointer shrink-0"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <div className="text-center px-2 min-w-0">
+                    <span className="text-xs sm:text-sm font-semibold text-content-primary truncate block">
+                      {activeTranslation ? activeTranslation.name : "Saheeh International"}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleNextTranslation}
+                    title="Next translator"
+                    aria-label="Next translator"
+                    className="p-1.5 rounded-xl bg-surface-card hover:bg-surface-hover border border-surface-border text-content-secondary hover:text-content-primary transition cursor-pointer shrink-0"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Quran.com Link (QL009: Moved to bottom of popup, underneath English translation & translator) */}
+                <div className="flex justify-center pt-1 pb-1">
+                  <a
+                    href={quranComUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={`Open ${verseParam} on Quran.com`}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-brand-light hover:bg-brand-primary hover:text-white text-brand-primary font-medium text-xs border border-brand-primary/20 transition shadow-xs cursor-pointer group"
+                  >
+                    <span className="font-mono font-semibold">Quran.com/{verseParam}</span>
+                    <ExternalLink className="w-3.5 h-3.5 shrink-0 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                  </a>
                 </div>
               </div>
             </div>
@@ -292,7 +326,7 @@ export const MushafModal: React.FC<MushafModalProps> = ({
               title={isSyncing ? "Syncing..." : isPlaying ? "Pause Audio" : "Play Audio"}
               aria-label={isPlaying ? "Pause Audio" : "Play Audio"}
               style={{
-                background: "linear-gradient(135deg, var(--color-primary), var(--color-primary-hover))",
+                background: "linear-gradient(135deg, var(--color-primary), var(--color-primary-glow))",
                 boxShadow: "0 8px 20px -4px var(--color-primary-glow)",
               }}
               className={`px-5 sm:px-6 py-2.5 rounded-2xl text-white font-bold text-xs sm:text-sm flex items-center gap-2 transition duration-200 active:scale-95 hover:brightness-110 cursor-pointer shadow-md ${
@@ -327,4 +361,3 @@ export const MushafModal: React.FC<MushafModalProps> = ({
     </div>
   );
 };
-

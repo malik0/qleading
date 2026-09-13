@@ -28,6 +28,7 @@ async function compressFile(file) {
   const isWebm = file.endsWith('.webm');
   const cmd = isWebm
     ? `ffmpeg -y -i "${inputPath}" -map_metadata 0 -map_chapters 0 -c:a libopus -b:a 64k "${tempPath}"`
+    ? `ffmpeg -y -i "${inputPath}" -map_metadata 0 -map_chapters 0 -c:a libopus -b:a 64k -dash 1 "${tempPath}"`
     : `ffmpeg -y -i "${inputPath}" -map_metadata 0 -map_chapters 0 -c:a libmp3lame -b:a 64k "${tempPath}"`;
 
   console.log(`[START] Compressing ${file} (${(stat.size / (1024 * 1024)).toFixed(2)} MiB)...`);
