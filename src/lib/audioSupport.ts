@@ -13,6 +13,7 @@ export function isTVBrowser(): boolean {
   return (
     ua.includes("smart-tv") ||
     ua.includes("smarttv") ||
+    ua.includes("smart_tv") ||
     ua.includes("tizen") ||
     ua.includes("webos") ||
     ua.includes("web0s") ||
@@ -21,17 +22,26 @@ export function isTVBrowser(): boolean {
     ua.includes("bravia") ||
     ua.includes("hisense") ||
     ua.includes("vidaa") ||
-    ua.includes("aftb") || // Fire TV box
-    ua.includes("aftt") || // Fire TV stick
-    ua.includes("aftm") || // Fire TV stick
+    ua.includes("aftb") ||
+    ua.includes("aftt") ||
+    ua.includes("aftm") ||
+    ua.includes("kft") ||
+    ua.includes("silk") ||
     ua.includes("hbbtv") ||
     ua.includes("appletv") ||
-    ua.includes("crkey") || // Chromecast
+    ua.includes("crkey") ||
+    ua.includes("chromecast") ||
     ua.includes("roku") ||
-    (ua.includes("android") && (ua.includes("tv") || ua.includes("large screen"))) ||
+    (ua.includes("android") && (ua.includes("tv") || ua.includes("large screen") || ua.includes("leanback"))) ||
     ua.includes("googletv") ||
     ua.includes("playstation") ||
-    ua.includes("xbox")
+    ua.includes("xbox") ||
+    ua.includes("tv bro") ||
+    ua.includes("tvbro") ||
+    ua.includes("puffin") ||
+    ua.includes("mibox") ||
+    ua.includes("mdz-") ||
+    ua.includes("shield android tv")
   );
 }
 
@@ -48,6 +58,30 @@ export function canPlayWebmOpus(): boolean {
     return canPlay === "probably" || canPlay === "maybe";
   } catch {
     return false;
+  }
+}
+
+/**
+ * Safely applies playback rate to an audio element.
+ * On Smart TV browsers (Samsung Tizen, LG webOS, Android TV), modifying defaultPlaybackRate
+ * or changing playbackRate when time-stretch resampling is unsupported can cause the hardware
+ * audio sink to mute completely. This helper safely updates playback rate without touching
+ * defaultPlaybackRate on TVs.
+ */
+export function safeSetPlaybackRate(audio: HTMLAudioElement | null, speed: number): void {
+  if (!audio) return;
+  try {
+    const isTV = isTVBrowser();
+    if (isTV) {
+      if (Math.abs(audio.playbackRate - speed) > 0.01) {
+        audio.playbackRate = speed;
+      }
+      return;
+    }
+    audio.playbackRate = speed;
+    audio.defaultPlaybackRate = speed;
+  } catch (err) {
+    console.warn("safeSetPlaybackRate warning:", err);
   }
 }
 
@@ -76,4 +110,3 @@ export function getBestAudioFormat(preferLocalAudio?: boolean): "webm" | "mp3" {
 
   return "mp3";
 }
-

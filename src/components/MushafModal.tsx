@@ -35,9 +35,13 @@ const MUSHAF_DISPLAY_LEAD_SECONDS = 0.08;
 
 type TextRange = { start: number; end: number };
 
+const FADED_TRANSLATION_REGEX =
+  /\[[^\]]*\]|\([^)]*\)|--(?:(?!--)[^\n.!?])+?--|—[^—\n.!?]+?—|–[^–\n.!?]+?–|[⌜˹][^⌝˺]*[⌝˺]|[\[\]()⌜⌝˹˺]/g;
+
 function findTextRanges(text: string, expression: RegExp): TextRange[] {
   const ranges: TextRange[] = [];
-  for (const match of text.matchAll(expression)) {
+  const regex = new RegExp(expression.source, expression.flags);
+  for (const match of text.matchAll(regex)) {
     if (match.index !== undefined) {
       ranges.push({ start: match.index, end: match.index + match[0].length });
     }
@@ -45,17 +49,16 @@ function findTextRanges(text: string, expression: RegExp): TextRange[] {
   return ranges;
 }
 
-function includesPosition(ranges: TextRange[], position: number): boolean {
-  return ranges.some((range) => position >= range.start && position < range.end);
-}
-
 function renderTranslationText(text: string): React.ReactNode[] {
-  const fadedRanges = findTextRanges(text, /\[[^\]]*\]|\([^)]*\)|--[\s\S]*?--|⌜[^⌝]*⌝/g);
-  const quotedRanges = findTextRanges(text, /“[^”]*”|"[^"]*"|‘[^’]*’|'[^']*'/g);
-  const divineNameRanges = findTextRanges(text, /\b(?:Allah|God|Allāh|Lord)\b/g);
-  const breakpoints = new Set<number>([0, text.length]);
+  if (!text) return [];
 
-  for (const range of [...fadedRanges, ...quotedRanges, ...divineNameRanges]) {
+  const fadedRanges = findTextRanges(text, FADED_TRANSLATION_REGEX);
+  if (fadedRanges.length === 0) {
+    return [<span key="0">{text}</span>];
+  }
+
+  const breakpoints = new Set<number>([0, text.length]);
+  for (const range of fadedRanges) {
     breakpoints.add(range.start);
     breakpoints.add(range.end);
   }
@@ -64,19 +67,13 @@ function renderTranslationText(text: string): React.ReactNode[] {
   return points.slice(0, -1).map((start, index) => {
     const end = points[index + 1];
     const midpoint = start + (end - start) / 2;
-    const isFaded = includesPosition(fadedRanges, midpoint);
-    const isQuoted = includesPosition(quotedRanges, midpoint);
-    const isDivineName = includesPosition(divineNameRanges, midpoint);
-    const className = [
-      isFaded ? "text-content-muted opacity-65" : "",
-      isQuoted ? "font-bold" : "",
-      isDivineName ? "font-bold italic underline underline-offset-2" : "",
-    ]
-      .filter(Boolean)
-      .join(" ");
+    const isFaded = fadedRanges.some((range) => midpoint >= range.start && midpoint < range.end);
 
     return (
-      <span key={`${start}-${end}`} className={className || undefined}>
+      <span
+        key={`${start}-${end}`}
+        className={isFaded ? "text-content-muted opacity-60 font-light select-text" : undefined}
+      >
         {text.slice(start, end)}
       </span>
     );

@@ -42,7 +42,7 @@ import {
   getDeviceId,
 } from "../lib/storage";
 import { getLocalDateString, getSlotIndexForDate, formatHeroTimer } from "../lib/utils";
-import { getBestAudioFormat, isTVBrowser, canPlayWebmOpus } from "../lib/audioSupport";
+import { getBestAudioFormat, isTVBrowser, canPlayWebmOpus, safeSetPlaybackRate } from "../lib/audioSupport";
 
 function isSameAudioUrl(src1?: string | null, src2?: string | null): boolean {
   if (!src1 || !src2) return false;
@@ -291,6 +291,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
           audioRef.current.playbackRate = loadedSettings.defaultPlaybackSpeed;
         } catch {}
       }
+      safeSetPlaybackRate(audioRef.current, loadedSettings.defaultPlaybackSpeed);
     }
     if (!loadedState.syncPoints || loadedState.syncPoints.length === 0) {
       const initJuz = INITIAL_JUZ_LIST.find((j) => j.id === (loadedState.currentJuzId || 1)) || INITIAL_JUZ_LIST[0];
@@ -334,9 +335,15 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
         if (data?.authenticated && data?.state) {
           // A browser restart must not allow an older D1 snapshot to replace
           // the more recent local checkpoint saved immediately before hiding.
+          // However, if the local state is an uninitialized guest session, the authenticated account always defines progress.
+          const isLocalGuestOrEmpty =
+            !loadedState.isLoggedIn ||
+            loadedState.userId.startsWith("guest_") ||
+            (loadedState.currentJuzId === 1 && (loadedState.playbackPositionSeconds || 0) === 0);
           const localUpdatedAt = new Date(loadedState.updatedAt || 0).getTime();
           const remoteUpdatedAt = new Date(data.state.updatedAt || 0).getTime();
-          const useLocalPlayback = Number.isFinite(localUpdatedAt) && localUpdatedAt >= remoteUpdatedAt;
+          const useLocalPlayback =
+            !isLocalGuestOrEmpty && Number.isFinite(localUpdatedAt) && localUpdatedAt >= remoteUpdatedAt;
           const playbackSource = useLocalPlayback ? loadedState : data.state;
           const targetPos = playbackSource.playbackPositionSeconds || 0;
           const targetJuzId = playbackSource.currentJuzId || 1;
@@ -390,9 +397,16 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
           const targetJuz = INITIAL_JUZ_LIST.find((j) => j.id === targetJuzId) || INITIAL_JUZ_LIST[0];
           const targetUrl = getAudioUrlForJuz(targetJuz);
           pendingAudioSeekRef.current = { url: targetUrl, position: targetPos };
-          if (audioRef.current && !isSameAudioUrl(audioRef.current.src, targetUrl)) {
-            audioRef.current.src = targetUrl;
-            audioRef.current.load();
+          if (audioRef.current) {
+            if (!isSameAudioUrl(audioRef.current.src, targetUrl)) {
+              audioRef.current.src = targetUrl;
+              audioRef.current.load();
+            } else if (audioRef.current.readyState >= 1) {
+              try {
+                audioRef.current.currentTime = targetPos;
+                pendingAudioSeekRef.current = null;
+              } catch {}
+            }
           }
           setPlaybackPosition(targetPos);
           playbackPosRef.current = targetPos;
@@ -407,6 +421,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
               if (audioRef.current) {
                 audioRef.current.playbackRate = mergedSettings.defaultPlaybackSpeed;
               }
+              safeSetPlaybackRate(audioRef.current, mergedSettings.defaultPlaybackSpeed);
             }
           }
 
@@ -512,12 +527,14 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
       const spd = playbackSpeedRef.current || playbackSpeed || 1.0;
       audioRef.current.playbackRate = spd;
       audioRef.current.defaultPlaybackRate = spd;
+      safeSetPlaybackRate(audioRef.current, spd);
       audioRef.current.load();
       try {
         const spd = playbackSpeedRef.current || playbackSpeed || 1.0;
         audioRef.current.playbackRate = spd;
         audioRef.current.defaultPlaybackRate = spd;
       } catch {}
+      safeSetPlaybackRate(audioRef.current, spd);
       if (wasPlaying) {
         audioRef.current.play().catch((err) => {
           if (err.name === "AbortError") return;
@@ -531,6 +548,9 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
 
   // Preload upcoming Juz audio in the background to ensure zero-latency gapless transitions
   const triggerPreloadNext = useCallback(() => {
+    // Smart TV browsers typically have a single hardware audio decoder pipeline.
+    // Preloading a second audio element can hijack or mute the hardware audio output sink.
+    if (isTVBrowser()) return;
     const curId = userStateRef.current.currentJuzId || 1;
     const nextId = curId < 30 ? curId + 1 : 1;
     if (preloadedJuzIdRef.current === nextId) return;
@@ -561,6 +581,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
       if (audioRef.current) {
         audioRef.current.playbackRate = partial.defaultPlaybackSpeed;
       }
+      safeSetPlaybackRate(audioRef.current, partial.defaultPlaybackSpeed);
     }
 
     // Persist settings into database if user is logged in
@@ -928,6 +949,9 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
             }
             audioRef.current.currentTime = data.position || 0;
           }
+          queueAudioSeek(data.juzId, data.position || 0);
+        } else if (data.position !== undefined) {
+          queueAudioSeek(userStateRef.current.currentJuzId, data.position);
         }
         setLastSynced(new Date().toLocaleTimeString());
         if (data.position !== undefined) {
@@ -938,6 +962,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
         if (data.position !== undefined) {
           setPlaybackPosition(data.position);
           playbackPosRef.current = data.position;
+          queueAudioSeek(userStateRef.current.currentJuzId, data.position);
         }
       }
     };
@@ -945,7 +970,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
     return () => {
       channel.close();
     };
-  }, [getAudioUrlForJuz]);
+  }, [queueAudioSeek]);
 
   // Unified Sync with Cloudflare D1
   const syncWithServer = useCallback(
@@ -981,26 +1006,14 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
             const targetPos = reconciled.playbackPositionSeconds || 0;
             const targetJuzId = reconciled.currentJuzId || 1;
 
-            if (!isTransitioningRef.current && targetJuzId !== currentState.currentJuzId) {
-              const targetJuz = INITIAL_JUZ_LIST.find((j) => j.id === targetJuzId) || INITIAL_JUZ_LIST[0];
-              const targetUrl = getAudioUrlForJuz(targetJuz);
-              if (audioRef.current && !isSameAudioUrl(audioRef.current.src, targetUrl)) {
-                audioRef.current.src = targetUrl;
-                audioRef.current.load();
-              }
-            }
-
-            if (audioRef.current && options?.isStartingPlayback) {
-              audioRef.current.currentTime = targetPos;
-            } else if (
-              audioRef.current &&
-              !isPlayingRef.current &&
-              Math.abs(audioRef.current.currentTime - targetPos) > 3
+            if (
+              !isTransitioningRef.current &&
+              (targetJuzId !== currentState.currentJuzId ||
+                Math.abs(playbackPosRef.current - targetPos) > 3 ||
+                options?.isStartingPlayback)
             ) {
-              audioRef.current.currentTime = targetPos;
+              queueAudioSeek(targetJuzId, targetPos);
             }
-            setPlaybackPosition(targetPos);
-            playbackPosRef.current = targetPos;
           }
 
           if (data.settings) {
@@ -1013,6 +1026,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
               try {
                 audioRef.current.playbackRate = reconciledSettings.defaultPlaybackSpeed;
               } catch {}
+              safeSetPlaybackRate(audioRef.current, reconciledSettings.defaultPlaybackSpeed);
             }
           }
 
@@ -1024,7 +1038,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
         setIsSyncing(false);
       }
     },
-    [getAudioUrlForJuz]
+    [queueAudioSeek]
   );
 
   const manualSync = useCallback(async () => {
@@ -1091,6 +1105,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
               audioRef.current.src = targetUrl;
             }
           }
+          queueAudioSeek(targetJuzId, targetPos);
 
           if (audioRef.current) {
             audioRef.current.currentTime = targetPos;
@@ -1109,6 +1124,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
           saveStoredSettings(reconciledSettings);
           if (reconciledSettings.defaultPlaybackSpeed && audioRef.current) {
             audioRef.current.playbackRate = reconciledSettings.defaultPlaybackSpeed;
+            safeSetPlaybackRate(audioRef.current, reconciledSettings.defaultPlaybackSpeed);
           }
         }
 
@@ -1131,7 +1147,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
     } finally {
       setIsSyncing(false);
     }
-  }, [getAudioUrlForJuz, saveSyncPoint]);
+  }, [saveSyncPoint, queueAudioSeek]);
 
   // Periodic Heartbeat & Auto-Sync during active playback (every 10 seconds)
   useEffect(() => {
@@ -1207,22 +1223,13 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
           userStateRef.current = reconciled;
           saveStoredState(reconciled);
 
-          if (reconciled.currentJuzId !== userStateRef.current.currentJuzId) {
-            const targetJuz = INITIAL_JUZ_LIST.find((j) => j.id === reconciled.currentJuzId) || INITIAL_JUZ_LIST[0];
-            const targetUrl = getAudioUrlForJuz(targetJuz);
-            if (audioRef.current && !isSameAudioUrl(audioRef.current.src, targetUrl)) {
-              audioRef.current.src = targetUrl;
-            }
-          }
           if (
-            audioRef.current &&
-            !isPlayingRef.current &&
-            Math.abs(audioRef.current.currentTime - (reconciled.playbackPositionSeconds || 0)) > 3
+            reconciled.currentJuzId !== userStateRef.current.currentJuzId ||
+            (!isPlayingRef.current &&
+              Math.abs((audioRef.current?.currentTime || 0) - (reconciled.playbackPositionSeconds || 0)) > 3)
           ) {
-            audioRef.current.currentTime = reconciled.playbackPositionSeconds || 0;
+            queueAudioSeek(reconciled.currentJuzId, reconciled.playbackPositionSeconds || 0);
           }
-          setPlaybackPosition(reconciled.playbackPositionSeconds || 0);
-          playbackPosRef.current = reconciled.playbackPositionSeconds || 0;
           setLastSynced(new Date().toLocaleTimeString());
         }
         // Condition B: Local device is paused, pull newer progress from server
@@ -1236,21 +1243,12 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
             userStateRef.current = reconciled;
             saveStoredState(reconciled);
 
-            if (reconciled.currentJuzId !== userStateRef.current.currentJuzId) {
-              const targetJuz = INITIAL_JUZ_LIST.find((j) => j.id === reconciled.currentJuzId) || INITIAL_JUZ_LIST[0];
-              const targetUrl = getAudioUrlForJuz(targetJuz);
-              if (audioRef.current && !isSameAudioUrl(audioRef.current.src, targetUrl)) {
-                audioRef.current.src = targetUrl;
-              }
-            }
             if (
-              audioRef.current &&
-              Math.abs(audioRef.current.currentTime - (reconciled.playbackPositionSeconds || 0)) > 3
+              reconciled.currentJuzId !== userStateRef.current.currentJuzId ||
+              Math.abs((audioRef.current?.currentTime || 0) - (reconciled.playbackPositionSeconds || 0)) > 3
             ) {
-              audioRef.current.currentTime = reconciled.playbackPositionSeconds || 0;
+              queueAudioSeek(reconciled.currentJuzId, reconciled.playbackPositionSeconds || 0);
             }
-            setPlaybackPosition(reconciled.playbackPositionSeconds || 0);
-            playbackPosRef.current = reconciled.playbackPositionSeconds || 0;
             setLastSynced(new Date().toLocaleTimeString());
           }
         }
@@ -1263,6 +1261,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
             saveStoredSettings(reconciledSettings);
             if (reconciledSettings.defaultPlaybackSpeed && audioRef.current) {
               audioRef.current.playbackRate = reconciledSettings.defaultPlaybackSpeed;
+              safeSetPlaybackRate(audioRef.current, reconciledSettings.defaultPlaybackSpeed);
             }
           }
         }
@@ -1282,7 +1281,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
       clearInterval(interval);
       window.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [userState.isLoggedIn, userState.userId, isSyncing, getAudioUrlForJuz]);
+  }, [userState.isLoggedIn, userState.userId, isSyncing, queueAudioSeek]);
 
   // Save a compact, current playback checkpoint at the last reliable lifecycle
   // boundary. Full-state sync is too large and too easy for mobile browsers to
@@ -1293,10 +1292,12 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
     lastPlaybackSnapshotRef.current = now;
 
     const audioPosition = audioRef.current?.currentTime;
-    const playbackPositionSeconds =
-      Number.isFinite(audioPosition) && (audioPosition || 0) >= 0
-        ? audioPosition || 0
-        : playbackPosRef.current;
+    let playbackPositionSeconds = playbackPosRef.current;
+    if (isPlayingRef.current && Number.isFinite(audioPosition) && (audioPosition as number) >= 0) {
+      playbackPositionSeconds = audioPosition as number;
+    } else if (Number.isFinite(audioPosition) && (audioPosition as number) > 0) {
+      playbackPositionSeconds = audioPosition as number;
+    }
     const updatedAt = new Date(now).toISOString();
     const snapshotState: UserState = {
       ...userStateRef.current,
@@ -1362,6 +1363,17 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
       try {
         audio.currentTime = targetPos;
       } catch {}
+      if (audio.readyState >= 1) {
+        try {
+          audio.currentTime = targetPos;
+        } catch {}
+      } else {
+        const curJuz = currentJuzRef.current || currentJuz;
+        pendingAudioSeekRef.current = {
+          url: getAudioUrlForJuz(curJuz),
+          position: targetPos,
+        };
+      }
     }
 
     // 1. Ensure audio element is unmuted and volume is at maximum
@@ -1374,6 +1386,8 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
       audio.playbackRate = spd;
       audio.defaultPlaybackRate = spd;
     } catch {}
+    const spd = playbackSpeedRef.current || playbackSpeed || 1.0;
+    safeSetPlaybackRate(audio, spd);
 
     // 3. SYNCHRONOUSLY initiate play() inside the user gesture.
     // Calling audio.play() synchronously is MANDATORY on Smart TV browsers (Tizen, webOS)
@@ -1452,26 +1466,12 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
             userStateRef.current = syncedState;
             saveStoredState(syncedState);
 
-            if (targetJuzId !== currentState.currentJuzId) {
-              const targetJuz = INITIAL_JUZ_LIST.find((j) => j.id === targetJuzId) || INITIAL_JUZ_LIST[0];
-              const targetUrl = getAudioUrlForJuz(targetJuz);
-              if (audioRef.current && !isSameAudioUrl(audioRef.current.src, targetUrl)) {
-                audioRef.current.src = targetUrl;
-                audioRef.current.load();
-                audioRef.current.currentTime = targetPos;
-                if (isPlayingRef.current) {
-                  audioRef.current.play().catch(() => {});
-                }
+            if (targetJuzId !== currentState.currentJuzId || Math.abs(playbackPosRef.current - targetPos) > 3) {
+              queueAudioSeek(targetJuzId, targetPos);
+              if (isPlayingRef.current && audioRef.current) {
+                audioRef.current.play().catch(() => {});
               }
-            } else if (audioRef.current && Math.abs(audioRef.current.currentTime - targetPos) > 3) {
-              audioRef.current.currentTime = targetPos;
             }
-
-            if (audioRef.current) {
-              audioRef.current.currentTime = targetPos;
-            }
-            setPlaybackPosition(targetPos);
-            playbackPosRef.current = targetPos;
 
             const syncedTimerSec = data.remoteState.timerSeconds ?? (settingsRef.current.timerTargetMinutes * 60);
             timerSecondsRef.current = syncedTimerSec;
@@ -1487,6 +1487,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
               try {
                 audioRef.current.playbackRate = reconciledSettings.defaultPlaybackSpeed;
               } catch {}
+              safeSetPlaybackRate(audioRef.current, reconciledSettings.defaultPlaybackSpeed);
             }
           }
         })
@@ -1497,7 +1498,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
           setIsSyncing(false);
         });
     }
-  }, [broadcastPlayback, getAudioUrlForJuz, saveSyncPoint, playbackSpeed]);
+  }, [broadcastPlayback, getAudioUrlForJuz, saveSyncPoint, playbackSpeed, queueAudioSeek]);
 
   const pause = useCallback(() => {
     if (audioRef.current) {
@@ -1621,6 +1622,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
         audioRef.current.playbackRate = speed;
         audioRef.current.defaultPlaybackRate = speed;
       }
+      safeSetPlaybackRate(audioRef.current, speed);
       updateSettings({ defaultPlaybackSpeed: speed });
 
       // Dynamically readjust Big Timer if it was matched to audio
@@ -1698,6 +1700,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
         audioRef.current.currentTime = 0;
         audioRef.current.playbackRate = activePlaybackSpeed;
         audioRef.current.defaultPlaybackRate = activePlaybackSpeed;
+        safeSetPlaybackRate(audioRef.current, activePlaybackSpeed);
         audioRef.current.load();
         try {
           audioRef.current.currentTime = 0;
@@ -1706,6 +1709,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
           audioRef.current.playbackRate = activePlaybackSpeed;
           audioRef.current.defaultPlaybackRate = activePlaybackSpeed;
         } catch {}
+        safeSetPlaybackRate(audioRef.current, activePlaybackSpeed);
         const playPromise = audioRef.current.play();
         if (playPromise !== undefined) {
           playPromise
@@ -2128,6 +2132,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
       const activeSpd = playbackSpeedRef.current || playbackSpeed || 1.0;
       audioRef.current.playbackRate = activeSpd;
       audioRef.current.defaultPlaybackRate = activeSpd;
+      safeSetPlaybackRate(audioRef.current, activeSpd);
       audioRef.current.load();
       try {
         audioRef.current.currentTime = 0;
@@ -2137,6 +2142,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
         audioRef.current.playbackRate = activeSpd;
         audioRef.current.defaultPlaybackRate = activeSpd;
       } catch {}
+      safeSetPlaybackRate(audioRef.current, activeSpd);
       const playPromise = audioRef.current.play();
       if (playPromise !== undefined) {
         playPromise
@@ -2583,7 +2589,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
     const origin = window.location.origin || "";
 
     const mediaTitle = currentMarker
-      ? `${juzName} • ${currentMarker.surahName} (Verse ${currentMarker.ayahNumber})`
+      ? `${juzName} • ${currentMarker.surahName} ${currentMarker.ayahNumber}`
       : juzName;
 
     if (navigator.mediaSession.metadata) {
@@ -2784,17 +2790,12 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
             try {
               audioRef.current.playbackRate = mergedSettings.defaultPlaybackSpeed;
             } catch {}
+            safeSetPlaybackRate(audioRef.current, mergedSettings.defaultPlaybackSpeed);
           }
         }
 
         if (merged.currentJuzId && audioRef.current) {
-          const targetJuz = INITIAL_JUZ_LIST.find((j) => j.id === merged.currentJuzId) || INITIAL_JUZ_LIST[0];
-          const targetUrl = getAudioUrlForJuz(targetJuz);
-          if (!isSameAudioUrl(audioRef.current.src, targetUrl)) {
-            audioRef.current.src = targetUrl;
-            audioRef.current.load();
-          }
-          audioRef.current.currentTime = merged.playbackPositionSeconds || 0;
+          queueAudioSeek(merged.currentJuzId, merged.playbackPositionSeconds || 0);
         }
 
         setLastSynced(new Date().toLocaleTimeString());
@@ -2806,7 +2807,7 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
     } finally {
       setIsSyncing(false);
     }
-  }, []);
+  }, [queueAudioSeek]);
 
   const resetAccountDetails = useCallback(
     async (payload: AccountResetPayload) => {
@@ -3099,6 +3100,8 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
             e.currentTarget.playbackRate = activeSpd;
             e.currentTarget.defaultPlaybackRate = activeSpd;
           } catch {}
+          const activeSpd = playbackSpeedRef.current || playbackSpeed || 1.0;
+          safeSetPlaybackRate(e.currentTarget, activeSpd);
           if (applyPendingAudioSeek(e.currentTarget)) {
             updatePositionState();
             return;

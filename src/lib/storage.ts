@@ -27,7 +27,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   autoTimerDurationMinutes: 30,
   timerMode: "countdown",
   streakStartDay: 1, // Monday
-  preferLocalAudio: true,
+  preferLocalAudio: false,
   themeMode: "dark",
   themeColor: "sky",
   defaultPlaybackSpeed: 1.0,
@@ -53,7 +53,7 @@ export const INITIAL_USER_STATE: UserState = {
   timerTargetMinutes: 30,
   streakTargetMinutes: 30,
   lastActiveDate: getLocalDateString(),
-  updatedAt: new Date().toISOString(),
+  updatedAt: "1970-01-01T00:00:00.000Z",
   historyRecords: {},
   userLogs: [],
   isPlaying: false,

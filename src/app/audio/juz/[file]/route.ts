@@ -30,7 +30,11 @@ export async function GET(
     return new Response("Audio storage is unavailable", { status: 503 });
   }
 
-  const object = await bucket.get(`juz/${file}`, { range: request.headers });
+  const hasRange = Boolean(request.headers.get("range"));
+  const object = await bucket.get(
+    `juz/${file}`,
+    hasRange ? { range: request.headers } : undefined,
+  );
   if (!object) {
     return new Response("Not found", { status: 404 });
   }
@@ -43,11 +47,13 @@ export async function GET(
   object.writeHttpMetadata(headers);
   headers.set("Accept-Ranges", "bytes");
 
-  if (object.range) {
+  if (hasRange && object.range) {
     const end = object.range.offset + object.range.length - 1;
     headers.set("Content-Length", String(object.range.length));
     headers.set("Content-Range", `bytes ${object.range.offset}-${end}/${object.size}`);
+    return new Response(object.body, { status: 206, headers });
   }
 
-  return new Response(object.body, { status: object.range ? 206 : 200, headers });
+  headers.set("Content-Length", String(object.size));
+  return new Response(object.body, { status: 200, headers });
 }
